@@ -23,7 +23,7 @@ The initial release prioritizes trustworthy manual redaction. Automatic face, te
 3. As an at-risk publisher, I want clear size and format errors before expensive decoding, so that a malicious or accidental file cannot silently freeze my device.
 4. As an at-risk publisher, I want EXIF orientation applied consistently, so that the image is not rotated or mirrored unexpectedly.
 5. As an at-risk publisher, I want the original pixel dimensions shown, so that I understand the quality of the source and export.
-6. As an at-risk publisher, I want a categorized metadata risk summary, so that I can understand whether the file contains location, device, timestamp, identity, thumbnail, editing-history, or provenance information.
+6. As an at-risk publisher, I want a categorized metadata risk summary, so that I can understand whether the file contains location, device, timestamp, identity, thumbnail, editing-history, provenance, other embedded text, or unclassified metadata structures.
 7. As an at-risk publisher, I want metadata values displayed only as inert text, so that a malicious filename or metadata field cannot execute code.
 8. As an at-risk publisher, I want metadata inspection failure to be visible but not cause metadata to be copied into output, so that sanitization remains safe.
 9. As an at-risk publisher, I want opaque rectangle redaction, so that I can permanently cover faces, names, screens, and identifiers.

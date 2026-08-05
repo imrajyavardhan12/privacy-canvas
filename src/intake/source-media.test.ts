@@ -4,6 +4,9 @@ import {
   inspectSourceMedia,
   PROVISIONAL_SOURCE_MEDIA_LIMITS,
   SourceMediaIntakeError,
+  type MetadataFinding,
+  type MetadataRiskCategory,
+  type MetadataRiskSummary,
   type SourceMediaIntakeLimits,
 } from './source-media'
 
@@ -20,13 +23,17 @@ describe('inspectSourceMedia', () => {
       encodedDimensions: { width: 64, height: 48 },
       normalizedDimensions: { width: 64, height: 48 },
       orientation: 1,
+      metadataRiskSummary: {
+        status: 'inspected',
+        groups: [],
+      },
     })
   })
 
   it.each(['metadata-rich.jpg', 'metadata-c2pa.jpg'])(
     'accepts a structurally valid metadata-bearing JPEG: %s',
     (name) => {
-      expect(inspectSourceMedia(fixture(name))).toEqual({
+      expect(inspectSourceMedia(fixture(name))).toMatchObject({
         format: 'jpeg',
         encodedDimensions: { width: 64, height: 48 },
         normalizedDimensions: { width: 64, height: 48 },
@@ -34,6 +41,333 @@ describe('inspectSourceMedia', () => {
       })
     },
   )
+
+  it('classifies EXIF camera identity values', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expect(metadataRiskSummary.groups).toContainEqual({
+      category: 'device-identity',
+      findings: expect.arrayContaining([
+        {
+          source: 'exif',
+          label: 'Camera make',
+          value: 'Privacy Canvas Fixture Camera',
+          truncated: false,
+        },
+        {
+          source: 'exif',
+          label: 'Camera model',
+          value: 'PC-SYNTHETIC-42',
+          truncated: false,
+        },
+        {
+          source: 'exif',
+          label: 'Camera serial number',
+          value: 'PC-SYNTHETIC-0001',
+          truncated: false,
+        },
+      ]),
+    })
+  })
+
+  it('groups EXIF text from the primary directory by privacy risk', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'timestamp', {
+      source: 'exif',
+      label: 'Modified date',
+      value: '2026:08:05 12:34:56',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'creator-contact', {
+      source: 'exif',
+      label: 'Artist',
+      value: 'Fixture Person <fixture@example.invalid>',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'editing-history', {
+      source: 'exif',
+      label: 'Software',
+      value: 'Privacy Canvas Fixture Editor 1.0',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'exif',
+      label: 'Image description',
+      value: 'PC-HOSTILE-EXIF <img src=x onerror="globalThis.PC_PWNED=1">',
+      truncated: false,
+    })
+  })
+
+  it('classifies EXIF subdirectory identity, timestamp, and hostile comment values', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'timestamp', {
+      source: 'exif',
+      label: 'Original capture date',
+      value: '2026:08:05 12:34:56',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'creator-contact', {
+      source: 'exif',
+      label: 'Camera owner',
+      value: 'Fixture Person',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'exif',
+      label: 'User comment',
+      value: 'PC-HOSTILE-EXIF <img src=x onerror="globalThis.PC_PWNED=1">',
+      truncated: false,
+    })
+  })
+
+  it('classifies EXIF GPS coordinates and the embedded thumbnail', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'location', {
+      source: 'exif',
+      label: 'GPS latitude',
+      value: '45, 30, 0',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'location', {
+      source: 'exif',
+      label: 'GPS longitude',
+      value: '73, 34, 0',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'embedded-thumbnail', {
+      source: 'exif',
+      label: 'Embedded JPEG thumbnail',
+      value: null,
+      truncated: false,
+    })
+  })
+
+  it('classifies decoded XMP values without interpreting embedded markup', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'creator-contact', {
+      source: 'xmp',
+      label: 'Creator',
+      value: 'Fixture Person <fixture@example.invalid>',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'xmp',
+      label: 'Description',
+      value: 'PC-HOSTILE-XMP <script>globalThis.PC_PWNED=1</script>',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'timestamp', {
+      source: 'xmp',
+      label: 'Created date',
+      value: '2026-08-05T12:34:56Z',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'editing-history', {
+      source: 'xmp',
+      label: 'Creator tool',
+      value: 'Privacy Canvas Fixture Editor 1.0',
+      truncated: false,
+    })
+  })
+
+  it('classifies IPTC identity, location, timestamp, and hostile caption values', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-rich.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'creator-contact', {
+      source: 'iptc',
+      label: 'By-line',
+      value: 'Fixture Person',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'location', {
+      source: 'iptc',
+      label: 'City',
+      value: 'Fixture City',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'timestamp', {
+      source: 'iptc',
+      label: 'Date created',
+      value: '20260805',
+      truncated: false,
+    })
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'iptc',
+      label: 'Caption',
+      value: 'PC-HOSTILE-IPTC <svg onload=globalThis.PC_PWNED=1>',
+      truncated: false,
+    })
+  })
+
+  it('classifies C2PA/JUMBF data as provenance risk', () => {
+    const { metadataRiskSummary } = inspectSourceMedia(
+      fixture('metadata-c2pa.jpg'),
+    )
+    expectMetadataFinding(metadataRiskSummary, 'provenance', {
+      source: 'jumbf',
+      label: 'C2PA Content Credentials',
+      value: null,
+      truncated: false,
+    })
+  })
+
+  it('returns metadata risk groups in stable review order', () => {
+    const { groups, status } = inspectSourceMedia(
+      fixture('metadata-c2pa.jpg'),
+    ).metadataRiskSummary
+    expect(status).toBe('inspected')
+    expect(groups.map(({ category }) => category)).toEqual([
+      'location',
+      'device-identity',
+      'timestamp',
+      'creator-contact',
+      'embedded-thumbnail',
+      'editing-history',
+      'provenance',
+      'embedded-text',
+    ])
+  })
+
+  it('renders control and bidirectional metadata characters visibly', () => {
+    const bytes = insertJpegSegment(
+      fixture('control-valid.jpg'),
+      0xfe,
+      new TextEncoder().encode('before\0middle\u202eafter'),
+    )
+    const { metadataRiskSummary } = inspectSourceMedia(bytes)
+
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'jpeg',
+      label: 'JPEG comment',
+      value: 'before\\u{0000}middle\\u{202e}after',
+      truncated: false,
+    })
+  })
+
+  it('bounds displayed metadata values and reports partial inspection', () => {
+    const comment = 'x'.repeat(600)
+    const bytes = insertJpegSegment(
+      fixture('control-valid.jpg'),
+      0xfe,
+      new TextEncoder().encode(comment),
+    )
+    const { metadataRiskSummary } = inspectSourceMedia(bytes)
+
+    expect(metadataRiskSummary.status).toBe('partial')
+    expectMetadataFinding(metadataRiskSummary, 'embedded-text', {
+      source: 'jpeg',
+      label: 'JPEG comment',
+      value: `${'x'.repeat(511)}…`,
+      truncated: true,
+    })
+  })
+
+  it('accepts pixels but reports partial inspection for malformed EXIF metadata', () => {
+    const bytes = insertJpegSegment(
+      fixture('control-valid.jpg'),
+      0xe1,
+      new TextEncoder().encode('Exif\0\0malformed'),
+    )
+    const inspection = inspectSourceMedia(bytes)
+
+    expect(inspection.metadataRiskSummary.status).toBe('partial')
+    expectMetadataFinding(
+      inspection.metadataRiskSummary,
+      'unclassified-metadata',
+      {
+        source: 'exif',
+        label: 'Unparsed EXIF metadata',
+        value: null,
+        truncated: false,
+      },
+    )
+  })
+
+  it('accepts pixels but reports partial inspection for malformed XMP metadata', () => {
+    const bytes = insertJpegSegment(
+      fixture('control-valid.jpg'),
+      0xe1,
+      new TextEncoder().encode(
+        'http://ns.adobe.com/xap/1.0/\0<x:xmpmeta><rdf:RDF>',
+      ),
+    )
+    const inspection = inspectSourceMedia(bytes)
+
+    expect(inspection.metadataRiskSummary.status).toBe('partial')
+    expectMetadataFinding(
+      inspection.metadataRiskSummary,
+      'unclassified-metadata',
+      {
+        source: 'xmp',
+        label: 'Unparsed XMP metadata',
+        value: null,
+        truncated: false,
+      },
+    )
+  })
+
+  it('accepts pixels but reports partial inspection for malformed IPTC metadata', () => {
+    const bytes = insertJpegSegment(
+      fixture('control-valid.jpg'),
+      0xed,
+      new TextEncoder().encode('Photoshop 3.0\0broken'),
+    )
+    const inspection = inspectSourceMedia(bytes)
+
+    expect(inspection.metadataRiskSummary.status).toBe('partial')
+    expectMetadataFinding(
+      inspection.metadataRiskSummary,
+      'unclassified-metadata',
+      {
+        source: 'iptc',
+        label: 'Unparsed IPTC metadata',
+        value: null,
+        truncated: false,
+      },
+    )
+  })
+
+  it('bounds the total number of metadata findings', () => {
+    let bytes = fixture('control-valid.jpg')
+    for (let index = 0; index < 70; index += 1) {
+      bytes = insertJpegSegment(
+        bytes,
+        0xfe,
+        new TextEncoder().encode(`comment-${index}`),
+      )
+    }
+
+    const { metadataRiskSummary } = inspectSourceMedia(bytes)
+    const findingCount = metadataRiskSummary.groups.reduce(
+      (total, group) => total + group.findings.length,
+      0,
+    )
+    expect(metadataRiskSummary.status).toBe('partial')
+    expect(findingCount).toBe(64)
+  })
+
+  it('reads orientation even after advisory metadata exceeds its budget', () => {
+    let bytes = fixture('orientation-6.jpg')
+    const largeComment = new Uint8Array(65_531).fill(0x78)
+    for (let index = 0; index < 17; index += 1) {
+      bytes = insertJpegSegment(bytes, 0xfe, largeComment, 0xe1)
+    }
+
+    const inspection = inspectSourceMedia(bytes)
+    expect(inspection.orientation).toBe(6)
+    expect(inspection.normalizedDimensions).toEqual({ width: 48, height: 64 })
+    expect(inspection.metadataRiskSummary.status).toBe('partial')
+  })
 
   it('rejects a renamed non-JPEG by its bytes', () => {
     expectFailure('invalid-not-jpeg.jpg', {
@@ -84,6 +418,24 @@ describe('inspectSourceMedia', () => {
       }
     }
   })
+
+  it.each(['metadata-rich.jpg', 'metadata-c2pa.jpg'])(
+    'never leaks an untyped metadata parser error for sampled mutations: %s',
+    (name) => {
+      const complete = fixture(name)
+      for (let offset = 0; offset < complete.length; offset += 251) {
+        const mutated = complete.slice()
+        mutated[offset] = mutated[offset]! ^ 0xff
+        try {
+          inspectSourceMedia(mutated)
+        } catch (error) {
+          expect(error, `${name} mutation at byte ${offset}`).toBeInstanceOf(
+            SourceMediaIntakeError,
+          )
+        }
+      }
+    },
+  )
 
   it('rejects malformed segments even when dimensions and EOI are present', () => {
     const bytes = fixture('control-valid.jpg').slice()
@@ -218,10 +570,25 @@ describe('inspectSourceMedia', () => {
         encodedDimensions: { width: 64, height: 48 },
         normalizedDimensions: { width, height },
         orientation,
+        metadataRiskSummary: {
+          status: 'inspected',
+          groups: [],
+        },
       })
     },
   )
 })
+
+function expectMetadataFinding(
+  summary: MetadataRiskSummary,
+  category: MetadataRiskCategory,
+  finding: MetadataFinding,
+): void {
+  expect(summary.groups).toContainEqual({
+    category,
+    findings: expect.arrayContaining([finding]),
+  })
+}
 
 function expectFailure(
   name: string,
@@ -249,6 +616,28 @@ function expectBytesFailure(
     expect(error).toBeInstanceOf(SourceMediaIntakeError)
     expect(error).toMatchObject(expected)
   }
+}
+
+function insertJpegSegment(
+  jpeg: Uint8Array,
+  marker: number,
+  payload: Uint8Array,
+  beforeMarker = 0xc0,
+): Uint8Array {
+  const frameOffset = findMarker(jpeg, beforeMarker)
+  const segment = new Uint8Array(payload.length + 4)
+  segment[0] = 0xff
+  segment[1] = marker
+  const length = payload.length + 2
+  segment[2] = length >>> 8
+  segment[3] = length & 0xff
+  segment.set(payload, 4)
+
+  const result = new Uint8Array(jpeg.length + segment.length)
+  result.set(jpeg.subarray(0, frameOffset), 0)
+  result.set(segment, frameOffset)
+  result.set(jpeg.subarray(frameOffset), frameOffset + segment.length)
+  return result
 }
 
 function readUint16(bytes: Uint8Array, offset: number): number {

@@ -47,7 +47,7 @@ A local, non-persistent result describing the output format, dimensions, confirm
 
 ### Metadata Risk Summary
 
-A plain-text classification of privacy-relevant source metadata, including location, device identity, timestamps, creator/contact information, embedded thumbnails, editing history, and provenance. Source values are untrusted.
+A bounded, plain-text classification of privacy-relevant source metadata, including location, device identity, timestamps, creator/contact information, embedded thumbnails, editing history, provenance, other embedded text, and unclassified metadata structures. Source values are untrusted. An `inspected` status means the supported advisory parsers completed; it does not prove that metadata is absent or fully understood.
 
 ### Network Lock
 
