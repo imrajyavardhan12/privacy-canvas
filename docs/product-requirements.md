@@ -1,6 +1,7 @@
 # Privacy Canvas v1 Product Requirements
 
 Status: accepted for foundation work  
+Tracking issue: [#1](https://github.com/imrajyavardhan12/privacy-canvas/issues/1)  
 Date: 2026-08-05
 
 ## Problem Statement

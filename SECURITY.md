@@ -8,9 +8,9 @@ Privacy Canvas is in foundation development. No release is currently approved fo
 
 Please do not open a public issue for a vulnerability that could expose Source Media, preserve redacted pixels or metadata, bypass export verification, compromise release integrity, or cause code execution.
 
-Until private security advisories are enabled, contact the repository owner through their GitHub profile and request a private reporting channel. Do not include sensitive media or a weaponized proof of concept in the initial message.
+Use [GitHub private vulnerability reporting](https://github.com/imrajyavardhan12/privacy-canvas/security/advisories/new). Do not include sensitive media in the report; use synthetic fixtures. Coordinate before attaching a weaponized proof of concept.
 
-A future public release must enable GitHub private vulnerability reporting and publish a dedicated security contact before launch.
+A dedicated security email must be published before public alpha.
 
 ## What to include
 

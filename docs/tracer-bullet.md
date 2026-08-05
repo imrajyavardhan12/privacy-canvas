@@ -1,5 +1,7 @@
 # First Tracer Bullet
 
+Tracking issue: [#2](https://github.com/imrajyavardhan12/privacy-canvas/issues/2)
+
 ## Goal
 
 Prove one complete privacy path before expanding the editor:
