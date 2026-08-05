@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report
+    url: https://github.com/imrajyavardhan12/privacy-canvas/security/advisories/new
+    about: Privately report a vulnerability. Do not attach sensitive media.
