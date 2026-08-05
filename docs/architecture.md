@@ -46,7 +46,7 @@ The Intake module owns the entire transition from untrusted local file to normal
 
 Metadata inspection is advisory. Intake failure never causes source container segments to be copied into output.
 
-The first pre-decode control is implemented in `src/intake/source-media.ts`. Its framework-independent `inspectSourceMedia` interface scans the complete JPEG marker stream, validates magic bytes and a single complete frame, rejects trailing or concatenated data, reads EXIF orientation, and enforces provisional byte, dimension, and pixel budgets. It does not yet decode pixels, classify metadata risks, or establish worker ownership; those remain part of the same Intake module rather than UI responsibilities.
+The pre-decode controls are implemented behind the framework-independent `inspectSourceMedia` interface in `src/intake/source-media.ts`. It scans the complete JPEG marker stream, validates magic bytes and a single complete frame, rejects trailing or concatenated data, reads EXIF orientation, and enforces provisional byte, dimension, and pixel budgets. `src/intake/jpeg-metadata.ts` adds bounded advisory classification for selected EXIF/GPS, XMP, IPTC, JPEG comment, embedded-thumbnail, and C2PA/JUMBF risks; recognized parser failures, truncated values, and exceeded metadata budgets produce a `partial` summary without making pixel intake depend on successful metadata interpretation. Pixel decoding and worker ownership remain unimplemented parts of the same Intake module rather than UI responsibilities.
 
 ### Working Document module
 

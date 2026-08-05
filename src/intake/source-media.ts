@@ -1,3 +1,5 @@
+import { JpegMetadataCollector } from './jpeg-metadata'
+
 export type SourceMediaIntakeStage = 'intake' | 'resource-limit'
 
 export type SourceMediaIntakeCode =
@@ -29,11 +31,40 @@ export type PixelDimensions = Readonly<{
   height: number
 }>
 
+export type MetadataRiskCategory =
+  | 'creator-contact'
+  | 'device-identity'
+  | 'editing-history'
+  | 'embedded-text'
+  | 'embedded-thumbnail'
+  | 'location'
+  | 'provenance'
+  | 'timestamp'
+  | 'unclassified-metadata'
+
+export type MetadataFinding = Readonly<{
+  source: 'exif' | 'iptc' | 'jumbf' | 'jpeg' | 'xmp'
+  label: string
+  value: string | null
+  truncated: boolean
+}>
+
+export type MetadataRiskGroup = Readonly<{
+  category: MetadataRiskCategory
+  findings: readonly MetadataFinding[]
+}>
+
+export type MetadataRiskSummary = Readonly<{
+  status: 'inspected' | 'partial'
+  groups: readonly MetadataRiskGroup[]
+}>
+
 export type SourceMediaInspection = Readonly<{
   format: 'jpeg'
   encodedDimensions: PixelDimensions
   normalizedDimensions: PixelDimensions
   orientation: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+  metadataRiskSummary: MetadataRiskSummary
 }>
 
 export type SourceMediaIntakeLimits = Readonly<{
@@ -97,6 +128,7 @@ export function inspectSourceMedia(
     malformedContainer('The JPEG container is incomplete.')
   }
 
+  const metadata = new JpegMetadataCollector()
   let dimensions: PixelDimensions | undefined
   let frameComponentCount: number | undefined
   let inEntropyData = false
@@ -139,6 +171,7 @@ export function inspectSourceMedia(
         encodedDimensions: dimensions,
         normalizedDimensions,
         orientation,
+        metadataRiskSummary: metadata.summarize(),
       }
     }
 
@@ -184,10 +217,19 @@ export function inspectSourceMedia(
     }
 
     if (marker === 0xe1) {
-      const parsedOrientation = readExifOrientation(
+      const parsedOrientation = metadata.inspectApp1(
         sourceBytes.subarray(payloadOffset, segmentEnd),
       )
       if (parsedOrientation !== undefined) orientation = parsedOrientation
+    }
+    if (marker === 0xeb) {
+      metadata.inspectApp11(sourceBytes.subarray(payloadOffset, segmentEnd))
+    }
+    if (marker === 0xed) {
+      metadata.inspectApp13(sourceBytes.subarray(payloadOffset, segmentEnd))
+    }
+    if (marker === 0xfe) {
+      metadata.inspectComment(sourceBytes.subarray(payloadOffset, segmentEnd))
     }
 
     if (startOfFrameMarkers.has(marker)) {
@@ -275,75 +317,6 @@ function isAnimatedGif(bytes: Uint8Array): boolean {
   let imageDescriptors = 0
   for (const byte of bytes) imageDescriptors += byte === 0x2c ? 1 : 0
   return imageDescriptors > 1
-}
-
-function readExifOrientation(
-  payload: Uint8Array,
-): SourceMediaInspection['orientation'] | undefined {
-  const isExif =
-    payload.length >= 6 &&
-    payload[0] === 0x45 &&
-    payload[1] === 0x78 &&
-    payload[2] === 0x69 &&
-    payload[3] === 0x66 &&
-    payload[4] === 0 &&
-    payload[5] === 0
-  if (!isExif) return undefined
-  if (payload.length < 14) return undefined
-
-  const tiff = payload.subarray(6)
-  const littleEndian = tiff[0] === 0x49 && tiff[1] === 0x49
-  const bigEndian = tiff[0] === 0x4d && tiff[1] === 0x4d
-  if (!littleEndian && !bigEndian) return undefined
-
-  const read16 = (offset: number): number | undefined =>
-    readTiffUint16(tiff, offset, littleEndian)
-  const read32 = (offset: number): number | undefined =>
-    readTiffUint32(tiff, offset, littleEndian)
-  if (read16(2) !== 42) return undefined
-
-  const ifdOffset = read32(4)
-  if (ifdOffset === undefined) return undefined
-  const entryCount = read16(ifdOffset)
-  if (entryCount === undefined) return undefined
-  const entriesEnd = ifdOffset + 2 + entryCount * 12
-  if (!Number.isSafeInteger(entriesEnd) || entriesEnd > tiff.length)
-    return undefined
-
-  for (let index = 0; index < entryCount; index += 1) {
-    const entryOffset = ifdOffset + 2 + index * 12
-    if (read16(entryOffset) !== 0x0112) continue
-    if (read16(entryOffset + 2) !== 3 || read32(entryOffset + 4) !== 1) {
-      return undefined
-    }
-
-    const orientation = read16(entryOffset + 8)
-    return orientation !== undefined && orientation >= 1 && orientation <= 8
-      ? (orientation as SourceMediaInspection['orientation'])
-      : undefined
-  }
-  return undefined
-}
-
-function readTiffUint16(
-  bytes: Uint8Array,
-  offset: number,
-  littleEndian: boolean,
-): number | undefined {
-  if (offset < 0 || offset + 2 > bytes.length) return undefined
-  return littleEndian
-    ? bytes[offset]! | (bytes[offset + 1]! << 8)
-    : (bytes[offset]! << 8) | bytes[offset + 1]!
-}
-
-function readTiffUint32(
-  bytes: Uint8Array,
-  offset: number,
-  littleEndian: boolean,
-): number | undefined {
-  if (offset < 0 || offset + 4 > bytes.length) return undefined
-  const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 4)
-  return view.getUint32(0, littleEndian)
 }
 
 function readUint16(bytes: Uint8Array, offset: number): number | undefined {
