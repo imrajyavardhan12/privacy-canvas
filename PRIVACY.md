@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-05
 
-Privacy Canvas is designed to process images locally. This document describes the intended v1 release. The current foundation build does not accept or process images.
+Privacy Canvas processes the current JPEG intake path locally. This document describes both implemented controls and the intended v1 release. Redaction, export, and output verification are not available yet.
 
 ## Data the production application will not collect
 
@@ -12,7 +12,7 @@ The static host will necessarily receive ordinary requests for application asset
 
 ## Local processing
 
-User-selected media will be processed in browser memory. Application code and required assets will be bundled and same-origin. Once required assets are ready, the intended editor workflow performs no network requests. A Network Lock is planned as defense-in-depth.
+User-selected JPEG media is processed in browser memory by a dedicated media worker. Application code and required assets are bundled and same-origin. Browser tests assert that the implemented intake and reset path makes no HTTP(S) requests after selection. A one-way Network Lock remains planned as defense-in-depth for the complete editor workflow.
 
 ## Storage
 
