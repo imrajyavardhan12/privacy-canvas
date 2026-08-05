@@ -46,6 +46,8 @@ The Intake module owns the entire transition from untrusted local file to normal
 
 Metadata inspection is advisory. Intake failure never causes source container segments to be copied into output.
 
+The first pre-decode control is implemented in `src/intake/source-media.ts`. Its framework-independent `inspectSourceMedia` interface scans the complete JPEG marker stream, validates magic bytes and a single complete frame, rejects trailing or concatenated data, reads EXIF orientation, and enforces provisional byte, dimension, and pixel budgets. It does not yet decode pixels, classify metadata risks, or establish worker ownership; those remain part of the same Intake module rather than UI responsibilities.
+
 ### Working Document module
 
 The Working Document owns transforms, Confirmed Redactions, operation ordering, and undo/redo. Geometry is represented in canonical document coordinates rather than viewport pixels. The current scaffold establishes the first invariant: a confirmed rectangle must have normalized coordinates, non-zero area, and a fully opaque RGB color.
