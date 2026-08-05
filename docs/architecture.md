@@ -46,7 +46,9 @@ The Intake module owns the entire transition from untrusted local file to normal
 
 Metadata inspection is advisory. Intake failure never causes source container segments to be copied into output.
 
-The pre-decode controls are implemented behind the framework-independent `inspectSourceMedia` interface in `src/intake/source-media.ts`. It scans the complete JPEG marker stream, validates magic bytes and a single complete frame, rejects trailing or concatenated data, reads EXIF orientation, and enforces provisional byte, dimension, and pixel budgets. `src/intake/jpeg-metadata.ts` adds bounded advisory classification for selected EXIF/GPS, XMP, IPTC, JPEG comment, embedded-thumbnail, and C2PA/JUMBF risks; recognized parser failures, truncated values, and exceeded metadata budgets produce a `partial` summary without making pixel intake depend on successful metadata interpretation. Pixel decoding and worker ownership remain unimplemented parts of the same Intake module rather than UI responsibilities.
+The pre-decode controls are implemented behind the framework-independent `inspectSourceMedia` interface in `src/intake/source-media.ts`. It scans the complete JPEG marker stream, validates magic bytes and a single complete frame, rejects trailing or concatenated data, reads EXIF orientation, and enforces provisional byte, dimension, and pixel budgets. `src/intake/jpeg-metadata.ts` adds bounded advisory classification for selected EXIF/GPS, XMP, IPTC, JPEG comment, embedded-thumbnail, and C2PA/JUMBF risks; recognized parser failures, truncated values, and exceeded metadata budgets produce a `partial` summary without making pixel intake depend on successful metadata interpretation.
+
+The browser intake path is implemented through the versioned, runtime-validated protocol in `src/workers/media-worker-protocol.ts`. The UI clears the file input; the client checks `File.size` before allocation, reads the selected `File` once, and transfers its `ArrayBuffer` to an inline-bundled dedicated worker without a data URL or HTTP(S) request. The worker runs preflight before `createImageBitmap`, neutralizes APP1 metadata only in a decode-specific copy, verifies that the decoder returns encoded dimensions, and applies the validated orientation itself before retaining normalized full-resolution pixels in an `OffscreenCanvas`. Only the inspection result and a preview bounded to 512 pixels per axis cross back to the UI. Intake and decode errors are typed; unexpected protocol values fail the worker session, and a provisional 20-second client deadline terminates a non-responsive worker. Reset clears the preview, asks the worker to clear its canvas, terminates it, and creates a fresh inline worker. Browser tests cover orientations 1–8 and expected corner order, hostile text rendering, malformed input and decoder failure, reduced preview dimensions, no user-media persistence, no HTTP(S) requests after selection, and startup under the production CSP/Trusted Types policy. Measured device budgets and deadline calibration, explicit color-space policy, and non-Chromium real-device evidence remain open.
 
 ### Working Document module
 
@@ -94,7 +96,7 @@ File System Access may become a third progressive adapter. Unsupported capabilit
 ## Data lifecycle
 
 1. The UI receives a user-selected File.
-2. The File is transferred to the media worker without conversion to a data URL.
+2. The client checks `File.size`, reads the File once, and transfers its `ArrayBuffer` to the media worker without conversion to a data URL.
 3. Intake validates the container and resource budget before full decode.
 4. Untrusted metadata is reduced to a plain-text Metadata Risk Summary.
 5. The media worker owns normalized full-resolution pixels.
@@ -127,4 +129,4 @@ Application assets may be cached for offline execution. Source Media, decoded pi
 
 ## Deployment
 
-The production application is a static build hosted over HTTPS on infrastructure capable of custom response headers. Production headers are represented by `public/_headers`. Runtime assets are same-origin and bundled. The initial scaffold sets `connect-src 'none'`; any future requirement to relax it requires an ADR and explicit threat-model review.
+The production application is a static build hosted over HTTPS on infrastructure capable of custom response headers. Production headers are represented by `public/_headers`. Runtime assets are same-origin and bundled. The inline media worker uses a same-origin blob URL under `worker-src 'self' blob:`; `src/security/trusted-types.ts` installs a default Trusted Types policy that can create only same-origin blob script URLs and cannot create HTML or script text. A browser test loads the application under the production policy and proves other worker URL shapes and string-based HTML sinks are rejected. `connect-src 'none'` remains in force; any future requirement to relax it requires an ADR and explicit threat-model review.

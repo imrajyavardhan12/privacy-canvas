@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('describes the foundation without claiming image processing is ready', async ({
+test('describes the available intake without claiming editing or export is ready', async ({
   page,
 }) => {
   await page.goto('/')
@@ -9,9 +9,10 @@ test('describes the foundation without claiming image processing is ready', asyn
     page.getByRole('heading', { level: 1, name: 'Privacy Canvas' }),
   ).toBeVisible()
   await expect(page.getByRole('status')).toContainText(
-    'The editor is not available yet',
+    'Ready to inspect one local JPEG',
   )
   await expect(
-    page.getByText('No user media is processed in this build'),
+    page.getByText('Redaction and export are not available yet'),
   ).toBeVisible()
+  await expect(page.getByText('User media stays on this device')).toBeVisible()
 })
