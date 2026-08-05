@@ -19,6 +19,12 @@ Open questions that may change risk ranking:
 - Real-device memory and megapixel budgets are not yet measured.
 - Any future detector or WASM codec introduces model/runtime assets and may require changes to the current no-connectivity policy.
 
+## Implemented security test evidence
+
+The synthetic corpus in `tests/fixtures/jpeg/` now provides committed inputs for TM-001, TM-003, and TM-005. Its 17 generated fixtures cover hostile filename and metadata text, EXIF/GPS/XMP/IPTC, an embedded thumbnail, camera and creator identity, timestamps, editing history, C2PA/JUMBF provenance, EXIF orientations 1–8, magic-byte mismatch, animation, truncation, malformed dimensions, oversized declared dimensions, and trailing data. `scripts/verify-fixture-corpus.mjs` independently checks corpus completeness, SHA-256 digests, structural signatures, declared dimensions, orientations, and required risk coverage through `npm run check`.
+
+These fixtures are test evidence, not runtime mitigations. Intake limits, parsing, text-only rendering, worker isolation, fresh encoding, and output verification remain unimplemented until later tracer-bullet slices provide cited controls.
+
 ## System model
 
 ### Primary components
