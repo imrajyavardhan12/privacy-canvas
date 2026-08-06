@@ -42,7 +42,7 @@ The product opportunity is a focused, auditable image privacy workbench—not a 
 
 ### Encoding
 
-[jSquash](https://github.com/jamsinclair/jSquash) provides browser- and worker-focused WASM encoders for JPEG, PNG, WebP, AVIF, and other formats under Apache-2.0. It is a candidate, not an accepted dependency. A spike must measure bundle size, memory, mobile latency, format metadata, CSP requirements, and malformed-input behaviour.
+[jSquash](https://github.com/jamsinclair/jSquash) provides browser- and worker-focused WASM encoders for JPEG, PNG, WebP, AVIF, and other formats under Apache-2.0. It remains a candidate for future formats, not an accepted dependency. For the first PNG tracer bullet, ADR-0007 selects a dependency-free opaque RGB8 output profile using platform deflate, an encoder that emits only `IHDR`/`IDAT`/`IEND`, and a separately implemented bounded Verifier. Full-resolution memory, latency, color, and cross-browser behavior still require Slice 4 integration and real-device measurement.
 
 ### Face suggestions
 
