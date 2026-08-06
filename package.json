@@ -6,13 +6,14 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24",
+    "pnpm": "11.20.0"
   },
-  "packageManager": "npm@11.6.1",
+  "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run fixtures:verify && npm run build",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run fixtures:verify && pnpm run build",
     "fixtures:verify": "node scripts/verify-fixture-corpus.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

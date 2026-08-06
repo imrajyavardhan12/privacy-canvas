@@ -40,24 +40,27 @@ See:
 Requirements:
 
 - Node.js 24 or newer
-- npm 11 or newer
+- Corepack, included with supported Node.js releases
+
+The repository pins its pnpm version. Enable Corepack once, then install exact dependencies:
 
 ```bash
-npm ci
-npm run dev
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run dev
 ```
 
 Run all local checks:
 
 ```bash
-npm run check
+pnpm run check
 ```
 
 Run browser tests after installing Chromium once:
 
 ```bash
-npx playwright install chromium
-npm run test:e2e
+pnpm exec playwright install chromium
+pnpm run test:e2e
 ```
 
 ## Architecture principles
