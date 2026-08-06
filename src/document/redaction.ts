@@ -3,6 +3,16 @@ export type NormalizedPoint = Readonly<{
   y: number
 }>
 
+export type NormalizedDelta = Readonly<{
+  x: number
+  y: number
+}>
+
+export type NormalizedSize = Readonly<{
+  width: number
+  height: number
+}>
+
 export type ConfirmedRectangleRedaction = Readonly<{
   id: string
   kind: 'rectangle'
@@ -15,7 +25,7 @@ export type ConfirmedRectangleRedaction = Readonly<{
   opacity: 1
 }>
 
-type ConfirmRectangleInput = Readonly<{
+export type ConfirmRectangleInput = Readonly<{
   id: string
   start: NormalizedPoint
   end: NormalizedPoint
@@ -61,6 +71,61 @@ export function confirmRectangle({
     color,
     opacity: 1,
   }
+}
+
+export function moveRectangle(
+  rectangle: ConfirmedRectangleRedaction,
+  delta: NormalizedDelta,
+): ConfirmRectangleInput {
+  if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) {
+    throw new Error('A rectangle movement requires finite coordinates.')
+  }
+
+  const x = clamp(rectangle.x + delta.x, 0, 1 - rectangle.width)
+  const y = clamp(rectangle.y + delta.y, 0, 1 - rectangle.height)
+  return {
+    id: rectangle.id,
+    start: { x, y },
+    end: { x: x + rectangle.width, y: y + rectangle.height },
+    color: rectangle.color,
+  }
+}
+
+export function resizeRectangle(
+  rectangle: ConfirmedRectangleRedaction,
+  delta: NormalizedDelta,
+  minimum: NormalizedSize,
+): ConfirmRectangleInput {
+  if (!Number.isFinite(delta.x) || !Number.isFinite(delta.y)) {
+    throw new Error('A rectangle resize requires finite coordinates.')
+  }
+  if (
+    !Number.isFinite(minimum.width) ||
+    minimum.width <= 0 ||
+    minimum.width > 1 - rectangle.x ||
+    !Number.isFinite(minimum.height) ||
+    minimum.height <= 0 ||
+    minimum.height > 1 - rectangle.y
+  ) {
+    throw new Error('A rectangle resize requires a valid minimum size.')
+  }
+
+  const width = clamp(rectangle.width + delta.x, minimum.width, 1 - rectangle.x)
+  const height = clamp(
+    rectangle.height + delta.y,
+    minimum.height,
+    1 - rectangle.y,
+  )
+  return {
+    id: rectangle.id,
+    start: { x: rectangle.x, y: rectangle.y },
+    end: { x: rectangle.x + width, y: rectangle.y + height },
+    color: rectangle.color,
+  }
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
 }
 
 function assertNormalizedPoint(point: NormalizedPoint): void {

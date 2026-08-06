@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('describes the available intake without claiming editing or export is ready', async ({
+test('describes local intake and editing without claiming verified export is ready', async ({
   page,
 }) => {
   await page.goto('/')
@@ -12,7 +12,9 @@ test('describes the available intake without claiming editing or export is ready
     'Ready to inspect one local JPEG',
   )
   await expect(
-    page.getByText('Redaction and export are not available yet'),
+    page.getByText(
+      'Rectangle editing is local; verified export is not available yet',
+    ),
   ).toBeVisible()
   await expect(page.getByText('User media stays on this device')).toBeVisible()
 })

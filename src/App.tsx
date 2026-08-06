@@ -4,6 +4,11 @@ import type {
   SourceMediaInspection,
 } from './intake/source-media'
 import {
+  createWorkingDocument,
+  type WorkingDocument,
+} from './document/working-document'
+import { RectangleEditor } from './ui/RectangleEditor'
+import {
   MediaWorkerClient,
   MediaWorkerOperationError,
 } from './workers/media-worker-client'
@@ -49,6 +54,8 @@ function App() {
   const [inspection, setInspection] = useState<SourceMediaInspection | null>(
     null,
   )
+  const [workingDocument, setWorkingDocument] =
+    useState<WorkingDocument | null>(null)
 
   useEffect(() => {
     let client: MediaWorkerClient
@@ -112,6 +119,7 @@ function App() {
     setBusy(true)
     setInspection(null)
     setSourceName(null)
+    setWorkingDocument(null)
     setStatus('Inspecting and decoding Source Media locally…')
     clearPreview(previewCanvas.current)
 
@@ -130,7 +138,10 @@ function App() {
       }
       setInspection(result.inspection)
       setSourceName(result.sourceName)
-      setStatus('Source ready. Review its metadata risks before editing.')
+      setWorkingDocument(
+        createWorkingDocument(result.inspection.normalizedDimensions),
+      )
+      setStatus('Source ready. Review metadata risks and add a redaction.')
     } catch (error) {
       const message =
         error instanceof MediaWorkerOperationError
@@ -157,6 +168,7 @@ function App() {
     setReady(false)
     setInspection(null)
     setSourceName(null)
+    setWorkingDocument(null)
     setStatus('Releasing the current private session…')
     clearPreview(previewCanvas.current)
 
@@ -195,8 +207,8 @@ function App() {
           <h2 id="intake-title">Open a local JPEG</h2>
           <p>
             The original bytes move to a dedicated media worker. Nothing is
-            uploaded or saved to browser storage. Redaction and export are not
-            available yet.
+            uploaded or saved to browser storage. Rectangle editing is local;
+            verified export is not available yet.
           </p>
         </div>
         <label className="file-picker">
@@ -209,12 +221,10 @@ function App() {
           />
         </label>
 
-        <canvas
-          aria-label="Normalized Source Media preview"
-          className="source-preview"
-          hidden={inspection === null}
-          ref={previewCanvas}
-          role="img"
+        <RectangleEditor
+          canvasRef={previewCanvas}
+          document={workingDocument}
+          onDocumentChange={setWorkingDocument}
         />
 
         {inspection !== null && sourceName !== null ? (

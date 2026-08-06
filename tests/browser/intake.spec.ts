@@ -241,6 +241,8 @@ test('reset releases the preview and worker session without persistence or egres
     .getByLabel('Choose a JPEG')
     .setInputFiles(join(fixtureDirectory, 'metadata-rich.jpg'))
   await expect(page.getByRole('status')).toContainText('Source ready')
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+  await expect(page.getByText('1 confirmed opaque rectangle')).toBeVisible()
   await page.getByRole('button', { name: 'Reset session' }).click()
 
   await expect(page.getByRole('status')).toContainText(
@@ -250,6 +252,9 @@ test('reset releases the preview and worker session without persistence or egres
     page.getByRole('img', { name: 'Normalized Source Media preview' }),
   ).toBeHidden()
   await expect(page.getByText('Metadata risks')).toBeHidden()
+  await expect(
+    page.getByRole('heading', { name: 'Opaque rectangle' }),
+  ).toBeHidden()
   expect(runtimeRequests).toEqual([])
   expect(
     await page.evaluate(async () => ({
