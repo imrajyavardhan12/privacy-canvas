@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { confirmRectangle } from './redaction'
+import { confirmRectangle, moveRectangle, resizeRectangle } from './redaction'
 
 describe('confirmRectangle', () => {
   it('normalizes drag direction and produces an opaque confirmed redaction', () => {
@@ -45,6 +45,43 @@ describe('confirmRectangle', () => {
         end: { x: 1, y: 1 },
       }),
     ).toThrow('from 0 to 1')
+  })
+
+  it('moves a rectangle without allowing it to leave the document', () => {
+    const rectangle = confirmRectangle({
+      id: 'redaction-1',
+      start: { x: 0.6, y: 0.6 },
+      end: { x: 0.9, y: 0.9 },
+    })
+
+    expect(moveRectangle(rectangle, { x: 0.5, y: -0.8 })).toEqual({
+      id: 'redaction-1',
+      start: { x: 0.7, y: 0 },
+      end: { x: 1, y: 0.30000000000000004 },
+      color: '#000000',
+    })
+  })
+
+  it('resizes from the bottom-right within canonical bounds and a minimum size', () => {
+    const rectangle = confirmRectangle({
+      id: 'redaction-1',
+      start: { x: 0.2, y: 0.2 },
+      end: { x: 0.5, y: 0.5 },
+    })
+    const minimum = { width: 0.1, height: 0.1 }
+
+    expect(resizeRectangle(rectangle, { x: 1, y: 1 }, minimum)).toEqual({
+      id: 'redaction-1',
+      start: { x: 0.2, y: 0.2 },
+      end: { x: 1, y: 1 },
+      color: '#000000',
+    })
+    expect(resizeRectangle(rectangle, { x: -1, y: -1 }, minimum)).toEqual({
+      id: 'redaction-1',
+      start: { x: 0.2, y: 0.2 },
+      end: { x: 0.30000000000000004, y: 0.30000000000000004 },
+      color: '#000000',
+    })
   })
 
   it('rejects a zero-area rectangle', () => {

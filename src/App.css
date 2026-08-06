@@ -106,13 +106,108 @@ h1 {
   clip-path: inset(50%);
 }
 
-.source-preview {
+.editor-viewport {
+  position: relative;
   grid-column: 1 / -1;
   width: min(100%, 40rem);
-  height: auto;
+  overflow: hidden;
   border: 1px solid var(--border-strong);
   border-radius: 0.75rem;
   background: #fff;
+}
+
+.editor-viewport[hidden] {
+  display: none;
+}
+
+.source-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+}
+
+.redaction-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.redaction-overlay:focus-visible {
+  outline: 4px solid var(--accent);
+  outline-offset: -4px;
+}
+
+.editor-hit-area {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.confirmed-rectangle {
+  fill: #000;
+  cursor: move;
+  stroke: #fff;
+  stroke-width: 0.006;
+  vector-effect: non-scaling-stroke;
+}
+
+.rectangle-resize-handle {
+  fill: var(--accent);
+  cursor: nwse-resize;
+  stroke: #fff;
+  stroke-width: 0.006;
+  vector-effect: non-scaling-stroke;
+}
+
+.redaction-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.redaction-controls h2 {
+  margin-bottom: 0.75rem;
+}
+
+.redaction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.redaction-actions button {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.redaction-actions button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.redaction-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.redaction-summary {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
 }
 
 .source-facts {

@@ -39,6 +39,8 @@ Implement file sniffing, provisional byte/pixel limits, metadata risk classifica
 
 Connect the existing opaque rectangle invariant to pointer and keyboard editing in canonical coordinates. Add operation history for add, update, and remove.
 
+Implemented evidence: the framework-independent Working Document records bounded opaque rectangle add/update/remove operations with undo/redo, while the UI exposes one pointer- and keyboard-editable rectangle over the reduced preview. Browser tests cover both input paths and prove editing adds no HTTP(S) requests. Full-resolution rendering and export remain later slices.
+
 ### Slice 4: preview and full-resolution render
 
 Render reduced previews and a canonical PNG pixel buffer from the same Working Document semantics. Add golden pixel and transform tests.

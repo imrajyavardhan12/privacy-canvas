@@ -52,7 +52,7 @@ The browser intake path is implemented through the versioned, runtime-validated 
 
 ### Working Document module
 
-The Working Document owns transforms, Confirmed Redactions, operation ordering, and undo/redo. Geometry is represented in canonical document coordinates rather than viewport pixels. The current scaffold establishes the first invariant: a confirmed rectangle must have normalized coordinates, non-zero area, and a fully opaque RGB color.
+The Working Document owns transforms, Confirmed Redactions, operation ordering, and undo/redo. Geometry is represented as normalized canonical document coordinates rather than viewport pixels. `src/document/working-document.ts` now records explicit source dimensions and applies framework-independent add, update, and remove commands to ordered rectangle operations. Undo and redo move through that operation history, a new command discards an abandoned redo branch, and unchanged updates do not create misleading history entries. `src/document/redaction.ts` enforces finite in-bounds coordinates, non-zero area, and a fully opaque RGB color; its move and bottom-right resize operations clamp geometry to the document boundary and a caller-supplied minimum size. The Working Document additionally rejects rectangles smaller than one canonical source pixel per axis. The first UI slice intentionally exposes only one editable rectangle.
 
 ### Renderer module
 
@@ -78,7 +78,7 @@ The Verifier does not claim that every Sensitive Region was found. A failed or i
 
 ### Viewport module
 
-The Viewport owns Pointer Events, pointer capture, keyboard input, pan, zoom, brush preview, and coordinate conversion. It never changes Working Document or export dimensions without issuing an explicit Transform.
+The Viewport owns Pointer Events, pointer capture, keyboard input, pan, zoom, brush preview, and coordinate conversion. `src/viewport/coordinates.ts` now converts CSS-scaled pointer positions into bounded normalized document points. The React-edge rectangle editor uses pointer capture for draw, move, and resize, and provides keyboard add, one-source-pixel move/resize, remove, undo, and redo paths. Viewport zoom and pan remain unimplemented; when added, they must not change Working Document or export dimensions without an explicit Transform.
 
 ### Detection module
 
@@ -101,7 +101,7 @@ File System Access may become a third progressive adapter. Unsupported capabilit
 4. Untrusted metadata is reduced to a plain-text Metadata Risk Summary.
 5. The media worker owns normalized full-resolution pixels.
 6. The UI receives only preview frames and document state.
-7. The user creates explicit transforms and Confirmed Redactions.
+7. The user creates Confirmed Redactions through canonical Working Document operations; explicit image transforms remain planned.
 8. The media worker renders a fresh full-resolution image.
 9. An encoder creates a new container without source segments.
 10. The Verifier inspects the final bytes and rendered masks.

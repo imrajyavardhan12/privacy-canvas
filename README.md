@@ -3,7 +3,7 @@
 Privacy Canvas is a local-first image privacy workbench for irreversible visual redaction and verifiable metadata sanitization.
 
 > [!WARNING]
-> Privacy Canvas is in its tracer-bullet phase. The current build accepts one local JPEG for bounded metadata inspection and a normalized preview, but redaction, export, and output verification are not available. Do not rely on it for safety-critical work until a reviewed release is published.
+> Privacy Canvas is in its tracer-bullet phase. The current build accepts one local JPEG for bounded metadata inspection, a normalized preview, and one editable opaque rectangle, but full-resolution rendering, export, and output verification are not available. Do not rely on it for safety-critical work until a reviewed release is published.
 
 ## Product promise
 
@@ -24,7 +24,7 @@ The current tracer bullet is:
 
 > Open a JPEG containing sensitive metadata, inspect a risk summary, add one opaque rectangle, export a full-resolution PNG, and independently verify the output.
 
-Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced previews, typed intake/decode failures, and best-effort session reset. Editing, encoding, verification, and save/share gating remain unimplemented.
+Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced previews, typed intake/decode failures, best-effort session reset, and one canonical opaque rectangle with pointer/keyboard editing and undo/redo. Full-resolution rendering, encoding, verification, and save/share gating remain unimplemented.
 
 See:
 
