@@ -64,6 +64,8 @@ The Renderer will run in a dedicated worker. OffscreenCanvas is preferred where 
 
 The Sanitizer coordinates export rendering and fresh encoding. It does not copy source file segments, metadata, thumbnails, or profiles. Format adapters are introduced only when two encoders are actually supported.
 
+The standalone PNG foundation is implemented in `src/encoder/png-encoder.ts` and `src/sanitizer/png-sanitizer.ts`. The encoder accepts only a dedicated dimension-matched RGBA8 rendered-pixel buffer with alpha 255 everywhere, transfers ownership away from its caller, and creates a strict opaque RGB8 non-interlaced PNG with exactly one `IHDR`, one `IDAT`, and one `IEND`. The Sanitizer returns an immutable branded `Blob` only after verification succeeds. These modules are not connected to the media worker, UI, or download path because Slice 4 canonical rendering does not yet exist.
+
 ### Verifier module
 
 The Verifier treats encoded output as untrusted. It checks:
@@ -74,7 +76,9 @@ The Verifier treats encoded output as untrusted. It checks:
 - absence of EXIF, GPS, XMP, IPTC, comments, thumbnails, source color profiles, and C2PA/JUMBF data; and
 - coverage of Confirmed Redactions after final encoding.
 
-The Verifier does not claim that every Sensitive Region was found. A failed or inconclusive check blocks save and share.
+`src/verifier/png-verifier.ts` now implements this policy for the deliberately narrow PNG profile. It snapshots mutable input, independently validates framing and CRCs, rejects every non-core chunk, bounds decompression to the exact expected RGB8 scanline length, checks canonical dimensions, structurally rejects alpha, and verifies required integer mask regions for exact RGB. The current required-region policy is synthetic foundation input; independent normalized Working Document-to-pixel coverage remains blocked on Slice 4 rasterization semantics.
+
+The Verifier does not claim that every Sensitive Region was found. A failed or inconclusive check blocks Sanitizer output. Save and share remain absent rather than exposing a path around the unintegrated verifier.
 
 ### Viewport module
 

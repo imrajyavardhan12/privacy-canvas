@@ -24,7 +24,7 @@ The current tracer bullet is:
 
 > Open a JPEG containing sensitive metadata, inspect a risk summary, add one opaque rectangle, export a full-resolution PNG, and independently verify the output.
 
-Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced previews, typed intake/decode failures, best-effort session reset, and one canonical opaque rectangle with pointer/keyboard editing and undo/redo. Full-resolution rendering, encoding, verification, and save/share gating remain unimplemented.
+Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced previews, typed intake/decode failures, best-effort session reset, one canonical opaque rectangle with pointer/keyboard editing and undo/redo, and a standalone strict PNG encoder/verifier foundation for synthetic rendered pixels. Full-resolution rendering, worker/UI export integration, independent canonical mask rasterization, external-tool output inspection, and save/share gating remain unimplemented.
 
 See:
 

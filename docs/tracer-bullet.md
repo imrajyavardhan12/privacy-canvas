@@ -49,6 +49,8 @@ Render reduced previews and a canonical PNG pixel buffer from the same Working D
 
 Evaluate a minimal PNG encoder, produce a fresh container, scan its chunks using an independent Verifier, decode the final output, check mask coverage, and gate download.
 
+Foundation implemented ahead of Slice 4: fully opaque synthetic RGBA8 buffers can be freshly encoded into a strict opaque RGB8 core-chunk-only PNG, independently parsed and boundedly decoded, checked for exact dimensions and opaque integer-region coverage, and released as an immutable `Blob` only after verification. This does **not** complete Slice 5: canonical renderer pixels, independent Working Document-to-mask rasterization, worker/UI integration, external-tool golden inspection, and download gating remain blocked on Slice 4.
+
 ### Slice 6: browser privacy proof
 
 Exercise the complete workflow under Chromium and WebKit-like automation where practical; inspect storage, object URL cleanup, CSP, requests, keyboard flow, and offline behaviour. Complete real-device Safari and Android checks before release.
