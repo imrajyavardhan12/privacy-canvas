@@ -1,4 +1,8 @@
 import { PROVISIONAL_SOURCE_MEDIA_LIMITS } from '../intake/source-media'
+import {
+  createCanonicalRenderPlan,
+  type CanonicalRenderDocument,
+} from '../renderer/canonical-renderer'
 import { boundUntrustedText } from '../security/untrusted-text'
 import MediaWorker from './media-worker?worker&inline'
 import {
@@ -8,6 +12,7 @@ import {
   type MediaWorkerRequest,
   type MediaWorkerResponse,
   type OpenSourceResult,
+  type RenderDocumentResult,
 } from './media-worker-protocol'
 
 export class MediaWorkerOperationError extends Error {
@@ -45,6 +50,7 @@ export class MediaWorkerClient {
   private readonly operationTimeoutMilliseconds: number
   private readonly pending = new Map<number, PendingOperation>()
   private nextRequestId = 1
+  private currentSourceId: number | undefined
   private readyTimeout: ReturnType<typeof setTimeout> | undefined
   private readyResolve: (() => void) | undefined
   private readyReject: ((error: Error) => void) | undefined
@@ -96,6 +102,7 @@ export class MediaWorkerClient {
     sourceBytes: ArrayBuffer,
   ): Promise<OpenSourceResult> {
     await this.ready
+    this.currentSourceId = undefined
     const response = await this.request(
       {
         protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
@@ -106,34 +113,98 @@ export class MediaWorkerClient {
       [sourceBytes],
     )
     if (response.type === 'source-ready') {
+      this.currentSourceId = response.sourceId
       return {
         inspection: response.inspection,
         previewDimensions: response.previewDimensions,
         preview: response.preview,
       }
     }
-    throw response.type === 'operation-failed'
-      ? new MediaWorkerOperationError(response.failure)
-      : new Error('The media worker returned an unexpected response.')
+    if (response.type === 'operation-failed') {
+      throw new MediaWorkerOperationError(response.failure)
+    }
+    return this.rejectUnexpectedResponse(response)
+  }
+
+  async renderWorkingDocument(
+    document: CanonicalRenderDocument,
+  ): Promise<RenderDocumentResult> {
+    const documentSnapshot = snapshotRenderDocument(document)
+    createCanonicalRenderPlan(documentSnapshot)
+    await this.ready
+    const sourceId = this.currentSourceId
+    if (sourceId === undefined) {
+      throw new MediaWorkerOperationError({
+        stage: 'render',
+        code: 'source-unavailable',
+        message: 'Canonical Source Media is unavailable for rendering.',
+      })
+    }
+    const response = await this.request(
+      {
+        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+        requestId: this.nextRequestId,
+        type: 'render-document',
+        sourceId,
+        document: documentSnapshot,
+      },
+      [],
+      'render',
+    )
+    if (response.type === 'render-ready') {
+      const expectedPreviewDimensions = fitWithinAxis(
+        documentSnapshot.dimensions,
+        512,
+      )
+      if (
+        response.sourceId !== sourceId ||
+        response.canonicalDimensions.width !==
+          documentSnapshot.dimensions.width ||
+        response.canonicalDimensions.height !==
+          documentSnapshot.dimensions.height ||
+        response.previewDimensions.width !== expectedPreviewDimensions.width ||
+        response.previewDimensions.height !== expectedPreviewDimensions.height
+      ) {
+        response.preview.close()
+        const error = new Error(
+          'The media worker returned unexpected dimensions or stale pixels.',
+        )
+        this.fail(error)
+        throw error
+      }
+      return {
+        sourceId: response.sourceId,
+        canonicalDimensions: response.canonicalDimensions,
+        previewDimensions: response.previewDimensions,
+        preview: response.preview,
+      }
+    }
+    if (response.type === 'operation-failed') {
+      throw new MediaWorkerOperationError(response.failure)
+    }
+    return this.rejectUnexpectedResponse(response)
   }
 
   async reset(): Promise<void> {
     await this.ready
+    this.currentSourceId = undefined
     const response = await this.request({
       protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
       requestId: this.nextRequestId,
       type: 'reset',
     })
     if (response.type === 'reset-complete') return
-    throw response.type === 'operation-failed'
-      ? new MediaWorkerOperationError(response.failure)
-      : new Error('The media worker returned an unexpected response.')
+    if (response.type === 'operation-failed') {
+      throw new MediaWorkerOperationError(response.failure)
+    }
+    return this.rejectUnexpectedResponse(response)
   }
 
   terminate(): void {
     if (this.terminated) return
     this.terminated = true
     this.worker.terminate()
+    this.currentSourceId = undefined
     clearTimeout(this.readyTimeout)
     this.readyTimeout = undefined
     const error = new Error('The media worker was terminated.')
@@ -148,6 +219,7 @@ export class MediaWorkerClient {
   private request(
     request: MediaWorkerRequest,
     transfer: Transferable[] = [],
+    timeoutStage: MediaWorkerFailure['stage'] = 'decode',
   ): Promise<MediaWorkerResponse> {
     if (this.terminated) {
       return Promise.reject(new Error('The media worker was terminated.'))
@@ -158,7 +230,7 @@ export class MediaWorkerClient {
         const operation = this.pending.get(request.requestId)
         if (operation === undefined) return
         this.pending.delete(request.requestId)
-        const error = operationTimeoutError()
+        const error = operationTimeoutError(timeoutStage)
         operation.reject(error)
         this.fail(error)
       }, this.operationTimeoutMilliseconds)
@@ -168,11 +240,12 @@ export class MediaWorkerClient {
       } catch (error) {
         clearTimeout(timeout)
         this.pending.delete(request.requestId)
-        reject(
+        const transferError =
           error instanceof Error
             ? error
-            : new Error('The media worker request could not be transferred.'),
-        )
+            : new Error('The media worker request could not be transferred.')
+        reject(transferError)
+        this.fail(transferError)
       }
     })
   }
@@ -180,6 +253,7 @@ export class MediaWorkerClient {
   private readonly handleMessage = (event: MessageEvent<unknown>): void => {
     const response = readMediaWorkerResponse(event.data)
     if (response === undefined) {
+      closeUnknownResponsePreview(event.data)
       this.fail(new Error('The media worker returned an invalid response.'))
       return
     }
@@ -193,7 +267,13 @@ export class MediaWorkerClient {
     }
 
     const operation = this.pending.get(response.requestId)
-    if (operation === undefined) return
+    if (operation === undefined) {
+      closeResponsePreview(response)
+      this.fail(
+        new Error('The media worker returned an unexpected response request.'),
+      )
+      return
+    }
     this.pending.delete(response.requestId)
     clearTimeout(operation.timeout)
     operation.resolve(response)
@@ -201,6 +281,13 @@ export class MediaWorkerClient {
 
   private readonly handleWorkerError = (): void => {
     this.fail(new Error('The media worker stopped unexpectedly.'))
+  }
+
+  private rejectUnexpectedResponse(response: MediaWorkerResponse): never {
+    closeResponsePreview(response)
+    const error = new Error('The media worker returned an unexpected response.')
+    this.fail(error)
+    throw error
   }
 
   private fail(error: Error): void {
@@ -214,9 +301,69 @@ export class MediaWorkerClient {
   }
 }
 
-function operationTimeoutError(): MediaWorkerOperationError {
+function closeUnknownResponsePreview(value: unknown): void {
+  try {
+    if (typeof value !== 'object' || value === null) return
+    const preview = (value as { readonly preview?: unknown }).preview
+    if (typeof ImageBitmap !== 'undefined' && preview instanceof ImageBitmap) {
+      preview.close()
+    }
+  } catch {
+    // Invalid worker data still terminates the session below.
+  }
+}
+
+function closeResponsePreview(response: MediaWorkerResponse): void {
+  if (response.type === 'source-ready' || response.type === 'render-ready') {
+    response.preview.close()
+  }
+}
+
+function fitWithinAxis(
+  dimensions: Readonly<{ width: number; height: number }>,
+  maximumAxis: number,
+): Readonly<{ width: number; height: number }> {
+  const scale = Math.min(
+    1,
+    maximumAxis / Math.max(dimensions.width, dimensions.height),
+  )
+  return {
+    width: Math.max(1, Math.round(dimensions.width * scale)),
+    height: Math.max(1, Math.round(dimensions.height * scale)),
+  }
+}
+
+function snapshotRenderDocument(
+  document: CanonicalRenderDocument,
+): CanonicalRenderDocument {
+  return Object.freeze({
+    dimensions: Object.freeze({
+      width: document.dimensions.width,
+      height: document.dimensions.height,
+    }),
+    redactions: Object.freeze(
+      document.redactions.map((redaction) =>
+        Object.freeze({
+          id: redaction.id,
+          kind: redaction.kind,
+          status: redaction.status,
+          x: redaction.x,
+          y: redaction.y,
+          width: redaction.width,
+          height: redaction.height,
+          color: redaction.color,
+          opacity: redaction.opacity,
+        }),
+      ),
+    ),
+  })
+}
+
+function operationTimeoutError(
+  stage: MediaWorkerFailure['stage'] = 'decode',
+): MediaWorkerOperationError {
   return new MediaWorkerOperationError({
-    stage: 'decode',
+    stage,
     code: 'operation-timeout',
     message: 'The media worker exceeded its safe operation deadline.',
   })
