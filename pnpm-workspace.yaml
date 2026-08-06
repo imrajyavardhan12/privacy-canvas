@@ -1,0 +1,13 @@
+allowBuilds:
+  fsevents: false
+blockExoticSubdeps: true
+dangerouslyAllowAllBuilds: false
+engineStrict: true
+minimumReleaseAge: 1440
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeStrict: true
+saveExact: true
+strictDepBuilds: true
+strictPeerDependencies: true
+trustLockfile: false
+verifyDepsBeforeRun: error

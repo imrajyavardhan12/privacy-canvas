@@ -12,11 +12,14 @@ Privacy Canvas welcomes careful contributions. Privacy guarantees take precedenc
 ## Development
 
 ```bash
-npm ci
-npm run check
-npx playwright install chromium
-npm run test:e2e
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm exec playwright install chromium
+pnpm run test:e2e
 ```
+
+The committed `pnpm-workspace.yaml` is supply-chain policy, not a convenience configuration. Do not bypass its release-age, peer, engine, exotic-source, or dependency-build checks. A dependency that requires an install script must receive explicit review and an exact `allowBuilds` decision; never enable all dependency builds.
 
 ## Tests
 

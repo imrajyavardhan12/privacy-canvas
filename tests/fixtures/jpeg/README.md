@@ -16,7 +16,7 @@ Install those command-line tools, then run the single authoritative generation c
 
 ```bash
 python3 scripts/generate-jpeg-fixtures.py
-npm run fixtures:verify
+pnpm run fixtures:verify
 ```
 
 The generator creates its PPM source in a temporary directory, invokes this JPEG encoding recipe, injects every metadata value using explicit ExifTool arguments, creates the C2PA fixture with `--create digitalCapture`, constructs malformed files from the valid control, and rewrites `manifest.json` with SHA-256 digests:
@@ -54,7 +54,7 @@ Regeneration may change JPEG bytes when tool versions change. The C2PA fixture c
 The repository verifier checks corpus completeness, hashes, magic bytes, JPEG dimensions, EXIF orientation values and expected normalized geometry, metadata container signatures, embedded thumbnail presence, hostile payload sentinels, and JUMBF APP11 data without relying on the future Intake module:
 
 ```bash
-npm run fixtures:verify
+pnpm run fixtures:verify
 ```
 
 For manual independent inspection:

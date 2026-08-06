@@ -11,8 +11,8 @@
 
 ## Verification
 
-- [ ] `npm run check`
-- [ ] `npm run test:e2e`
+- [ ] `pnpm run check`
+- [ ] `pnpm run test:e2e`
 - [ ] Negative tests cover unsafe or failing output where applicable
 - [ ] Documentation and ADRs updated where required
 - [ ] Only synthetic or properly licensed fixtures are included

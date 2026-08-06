@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Privacy Canvas currently includes development and runtime packages recorded in `package.json` and `package-lock.json`. Their licenses must be reviewed as part of each dependency change and release.
+Privacy Canvas currently includes development and runtime packages recorded in `package.json` and `pnpm-lock.yaml`. Their licenses must be reviewed as part of each dependency change and release.
 
 The project is inspired by, but does not include source code from:
 

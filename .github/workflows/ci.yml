@@ -24,19 +24,24 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 24
-          cache: npm
+          package-manager-cache: false
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable pnpm
+          pnpm --version
 
       - name: Install exact dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
 
       - name: Run static checks, tests, and build
-        run: npm run check
+        run: pnpm run check
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser tests
-        run: npm run test:e2e
+        run: pnpm run test:e2e
