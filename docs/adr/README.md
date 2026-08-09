@@ -9,6 +9,7 @@ ADRs record load-bearing decisions that future contributors should not silently 
 - [ADR-0005: Do not persist user media](0005-no-user-media-persistence.md)
 - [ADR-0006: Offline cache contains application assets only](0006-offline-asset-cache-only.md)
 - [ADR-0007: Use a minimal strict PNG profile](0007-minimal-strict-png-profile.md)
+- [ADR-0008: Round confirmed masks outward to canonical pixels](0008-conservative-canonical-mask-coverage.md)
 
 ## New ADRs
 

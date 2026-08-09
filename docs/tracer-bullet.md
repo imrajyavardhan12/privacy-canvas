@@ -45,11 +45,13 @@ Implemented evidence: the framework-independent Working Document records bounded
 
 Render reduced previews and a canonical PNG pixel buffer from the same Working Document semantics. Add golden pixel and transform tests.
 
+Implemented rectangle-only evidence: a framework-independent Renderer validates and snapshots hostile render state, conservatively maps normalized half-open rectangles to integer canonical pixels under ADR-0008, applies exact opaque colors in operation order to a dedicated canonical RGBA buffer, and maps the same canonical masks outward onto bounded previews. The version 2 worker protocol binds render requests to source identifiers, rejects unknown response data, retains the latest full-resolution derivative only in the worker, and returns a redacted `ImageBitmap`; stale UI results are closed and dimension mismatches terminate the session. A separate Verifier-side module independently derives final-visible integer regions, including ordered overlaps, and a test carries synthetic canonical output through the strict PNG gate. Golden tests cover colors, overlap order, fractional and 0/1 edges, one-pixel/tiny output, preview scaling, canonical dimensions, malformed plans, resource bounds, stale preview replacement, cleanup, and no full-resolution response field. Image transforms are still unsupported, so transform-order goldens, full-resolution device budgets, and non-Chromium evidence remain open rather than being claimed complete.
+
 ### Slice 5: fresh PNG and verifier
 
 Evaluate a minimal PNG encoder, produce a fresh container, scan its chunks using an independent Verifier, decode the final output, check mask coverage, and gate download.
 
-Foundation implemented ahead of Slice 4: fully opaque synthetic RGBA8 buffers can be freshly encoded into a strict opaque RGB8 core-chunk-only PNG, independently parsed and boundedly decoded, checked for exact dimensions and opaque integer-region coverage, and released as an immutable `Blob` only after verification. This does **not** complete Slice 5: canonical renderer pixels, independent Working Document-to-mask rasterization, worker/UI integration, external-tool golden inspection, and download gating remain blocked on Slice 4.
+Foundation implemented ahead of Slice 4: fully opaque RGBA8 buffers can be freshly encoded into a strict opaque RGB8 core-chunk-only PNG, independently parsed and boundedly decoded, checked for exact dimensions and opaque integer-region coverage, and released as an immutable `Blob` only after verification. Canonical rendering and independent Working Document-to-mask derivation now exist and are connected in framework-independent tests. This does **not** complete Slice 5: worker-owned canonical output is not yet transferred into one fresh-encode/final-verification operation, and committed external-tool golden inspection plus download gating remain absent.
 
 ### Slice 6: browser privacy proof
 

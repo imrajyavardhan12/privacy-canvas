@@ -84,6 +84,37 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const client = mediaWorker.current
+    if (client === null || workingDocument === null) return
+    let active = true
+    void client
+      .renderWorkingDocument(workingDocument)
+      .then((result) => {
+        if (!active) {
+          result.preview.close()
+          return
+        }
+        drawPreview(
+          previewCanvas.current,
+          result.previewDimensions,
+          result.preview,
+        )
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        clearPreview(previewCanvas.current)
+        setStatus(
+          error instanceof MediaWorkerOperationError
+            ? error.message
+            : 'The redacted preview could not be rendered safely.',
+        )
+      })
+    return () => {
+      active = false
+    }
+  }, [workingDocument])
+
   const replaceMediaWorker = async (
     current: MediaWorkerClient,
   ): Promise<boolean> => {
@@ -125,17 +156,11 @@ function App() {
 
     try {
       const result = await client.openFile(file)
-      const canvas = previewCanvas.current
-      try {
-        if (canvas === null) throw new Error('Preview canvas is unavailable.')
-        canvas.width = result.previewDimensions.width
-        canvas.height = result.previewDimensions.height
-        const context = canvas.getContext('2d', { alpha: false })
-        if (context === null) throw new Error('Preview canvas is unavailable.')
-        context.drawImage(result.preview, 0, 0)
-      } finally {
-        result.preview.close()
-      }
+      drawPreview(
+        previewCanvas.current,
+        result.previewDimensions,
+        result.preview,
+      )
       setInspection(result.inspection)
       setSourceName(result.sourceName)
       setWorkingDocument(
@@ -319,6 +344,26 @@ function App() {
       </footer>
     </main>
   )
+}
+
+function drawPreview(
+  canvas: HTMLCanvasElement | null,
+  dimensions: Readonly<{ width: number; height: number }>,
+  preview: ImageBitmap,
+): void {
+  try {
+    if (canvas === null) throw new Error('Preview canvas is unavailable.')
+    canvas.width = dimensions.width
+    canvas.height = dimensions.height
+    const context = canvas.getContext('2d', {
+      alpha: false,
+      colorSpace: 'srgb',
+    })
+    if (context === null) throw new Error('Preview canvas is unavailable.')
+    context.drawImage(preview, 0, 0)
+  } finally {
+    preview.close()
+  }
 }
 
 function clearPreview(canvas: HTMLCanvasElement | null): void {

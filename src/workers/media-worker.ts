@@ -7,6 +7,13 @@ import {
   type SourceMediaInspection,
 } from '../intake/source-media'
 import {
+  CanonicalRenderError,
+  createPreviewRenderPlan,
+  renderCanonicalRgba,
+  type CanonicalRenderPlan,
+  type CanonicalRgbaRaster,
+} from '../renderer/canonical-renderer'
+import {
   MEDIA_WORKER_PROTOCOL_VERSION,
   readMediaWorkerRequest,
   type MediaWorkerFailure,
@@ -18,6 +25,10 @@ const maximumPreviewAxis = 512
 const workerScope = self as DedicatedWorkerGlobalScope
 
 let normalizedCanvas: OffscreenCanvas | undefined
+let normalizedContext: OffscreenCanvasRenderingContext2D | undefined
+let canonicalRenderedPixels: CanonicalRgbaRaster | undefined
+let currentSourceId: number | undefined
+let nextSourceId = 1
 let operationQueue: Promise<void> = Promise.resolve()
 
 workerScope.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -50,15 +61,67 @@ async function handleMessage(value: unknown): Promise<void> {
     return
   }
 
+  if (request.type === 'render-document') {
+    resetCanonicalRenderedPixels()
+    if (
+      normalizedCanvas === undefined ||
+      normalizedContext === undefined ||
+      currentSourceId === undefined
+    ) {
+      postFailure(request.requestId, {
+        stage: 'render',
+        code: 'source-unavailable',
+        message: 'Canonical Source Media is unavailable for rendering.',
+      })
+      return
+    }
+    if (request.sourceId !== currentSourceId) {
+      postFailure(request.requestId, {
+        stage: 'render',
+        code: 'stale-source',
+        message: 'The render request belongs to a stale source.',
+      })
+      return
+    }
+    try {
+      const result = renderDocument(
+        normalizedCanvas,
+        normalizedContext,
+        request.renderPlan,
+      )
+      canonicalRenderedPixels = result.canonicalPixels
+      post(
+        {
+          protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+          requestId: request.requestId,
+          type: 'render-ready',
+          sourceId: currentSourceId,
+          canonicalDimensions: result.canonicalPixels.dimensions,
+          previewDimensions: result.previewDimensions,
+          preview: result.preview,
+        },
+        [result.preview],
+      )
+    } catch (error) {
+      resetCanonicalRenderedPixels()
+      postFailure(request.requestId, describeRenderFailure(error))
+    }
+    return
+  }
+
   resetNormalizedPixels()
   try {
     const inspection = inspectSourceMedia(new Uint8Array(request.sourceBytes))
     const result = await decodeSource(request.sourceBytes, inspection)
+    const sourceId = nextSourceId
+    nextSourceId += 1
+    currentSourceId = sourceId
     post(
       {
         protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
         requestId: request.requestId,
         type: 'source-ready',
+        sourceId,
         ...result,
       },
       [result.preview],
@@ -92,7 +155,10 @@ async function decodeSource(
     }
 
     const canvas = new OffscreenCanvas(width, height)
-    const context = canvas.getContext('2d', { alpha: false })
+    const context = canvas.getContext('2d', {
+      alpha: false,
+      colorSpace: 'srgb',
+    })
     if (context === null) throw new Error('decode-failed')
     applyExifOrientation(
       context,
@@ -102,6 +168,7 @@ async function decodeSource(
     )
     context.drawImage(decoded, 0, 0)
     normalizedCanvas = canvas
+    normalizedContext = context
 
     const previewDimensions = fitWithinAxis(
       inspection.normalizedDimensions,
@@ -111,7 +178,10 @@ async function decodeSource(
       previewDimensions.width,
       previewDimensions.height,
     )
-    const previewContext = previewCanvas.getContext('2d', { alpha: false })
+    const previewContext = previewCanvas.getContext('2d', {
+      alpha: false,
+      colorSpace: 'srgb',
+    })
     if (previewContext === null) throw new Error('decode-failed')
     previewContext.drawImage(
       canvas,
@@ -246,11 +316,113 @@ function fitWithinAxis(
   }
 }
 
+function renderDocument(
+  sourceCanvas: OffscreenCanvas,
+  sourceContext: OffscreenCanvasRenderingContext2D,
+  plan: CanonicalRenderPlan,
+): Readonly<{
+  canonicalPixels: CanonicalRgbaRaster
+  previewDimensions: PixelDimensions
+  preview: ImageBitmap
+}> {
+  if (
+    plan.dimensions.width !== sourceCanvas.width ||
+    plan.dimensions.height !== sourceCanvas.height
+  ) {
+    throw new CanonicalRenderError(
+      'render-dimensions-mismatch',
+      'Working Document dimensions do not match canonical Source Media.',
+    )
+  }
+
+  const imageData = sourceContext.getImageData(
+    0,
+    0,
+    plan.dimensions.width,
+    plan.dimensions.height,
+  )
+  const sourceRgba =
+    imageData.data.buffer instanceof ArrayBuffer &&
+    imageData.data.byteOffset === 0 &&
+    imageData.data.byteLength === imageData.data.buffer.byteLength
+      ? new Uint8Array(imageData.data.buffer)
+      : new Uint8Array(imageData.data)
+  let canonicalPixels: CanonicalRgbaRaster
+  try {
+    canonicalPixels = renderCanonicalRgba(
+      { dimensions: plan.dimensions, rgba: sourceRgba },
+      plan,
+    )
+  } finally {
+    sourceRgba.fill(0)
+  }
+
+  const previewDimensions = fitWithinAxis(plan.dimensions, maximumPreviewAxis)
+  const previewCanvas = new OffscreenCanvas(
+    previewDimensions.width,
+    previewDimensions.height,
+  )
+  const previewContext = previewCanvas.getContext('2d', {
+    alpha: false,
+    colorSpace: 'srgb',
+  })
+  if (previewContext === null) {
+    canonicalPixels.rgba.fill(0)
+    throw new Error('render-failed')
+  }
+  previewContext.drawImage(
+    sourceCanvas,
+    0,
+    0,
+    previewDimensions.width,
+    previewDimensions.height,
+  )
+  const previewPlan = createPreviewRenderPlan(plan, previewDimensions)
+  for (const redaction of previewPlan.redactions) {
+    previewContext.fillStyle = redaction.color
+    previewContext.fillRect(
+      redaction.x,
+      redaction.y,
+      redaction.width,
+      redaction.height,
+    )
+  }
+
+  return {
+    canonicalPixels,
+    previewDimensions,
+    preview: previewCanvas.transferToImageBitmap(),
+  }
+}
+
+function resetCanonicalRenderedPixels(): void {
+  canonicalRenderedPixels?.rgba.fill(0)
+  canonicalRenderedPixels = undefined
+}
+
 function resetNormalizedPixels(): void {
+  resetCanonicalRenderedPixels()
+  currentSourceId = undefined
+  normalizedContext = undefined
   if (normalizedCanvas !== undefined) {
     normalizedCanvas.width = 1
     normalizedCanvas.height = 1
     normalizedCanvas = undefined
+  }
+}
+
+function describeRenderFailure(error: unknown): MediaWorkerFailure {
+  if (error instanceof CanonicalRenderError) {
+    return {
+      stage: 'render',
+      code: error.code,
+      message: error.message,
+    }
+  }
+  return {
+    stage: 'render',
+    code: 'render-failed',
+    message: 'Canonical pixels could not be rendered safely.',
   }
 }
 

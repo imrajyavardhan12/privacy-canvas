@@ -56,6 +56,62 @@ test('keyboard user can add, move, resize, remove, undo, and redo one rectangle'
   await expect(page.getByText(/width 52%/)).toBeVisible()
 })
 
+test('renders confirmed masks into the worker-produced preview', async ({
+  page,
+}) => {
+  await openSource(page)
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+
+  const preview = page.getByRole('img', {
+    name: 'Normalized Source Media preview',
+  })
+  await expect
+    .poll(() =>
+      preview.evaluate((element) => {
+        const canvas = element as HTMLCanvasElement
+        const context = canvas.getContext('2d')
+        if (context === null) throw new Error('missing preview context')
+        return [
+          ...context.getImageData(
+            Math.floor(canvas.width / 2),
+            Math.floor(canvas.height / 2),
+            1,
+            1,
+          ).data,
+        ]
+      }),
+    )
+    .toEqual([0, 0, 0, 255])
+  await expect(preview).toHaveJSProperty('width', 64)
+  await expect(preview).toHaveJSProperty('height', 48)
+})
+
+test('discards stale previews and redraws from retained canonical source pixels', async ({
+  page,
+}) => {
+  await openSource(page)
+  const preview = page.getByRole('img', {
+    name: 'Normalized Source Media preview',
+  })
+  const sourcePixel = await readPreviewPixel(preview, 17, 24)
+  expect(sourcePixel).not.toEqual([0, 0, 0, 255])
+
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+  const editor = page.getByRole('group', { name: 'Redaction editor' })
+  await editor.focus()
+  for (let step = 0; step < 4; step += 1) await editor.press('ArrowRight')
+
+  await expect
+    .poll(async () => ({
+      uncovered: await readPreviewPixel(preview, 17, 24),
+      covered: await readPreviewPixel(preview, 20, 24),
+    }))
+    .toEqual({
+      uncovered: sourcePixel,
+      covered: [0, 0, 0, 255],
+    })
+})
+
 test('pointer user edits one rectangle in canonical coordinates', async ({
   page,
 }) => {
@@ -116,3 +172,19 @@ test('pointer user edits one rectangle in canonical coordinates', async ({
   await expect(page.getByText('No confirmed redactions')).toBeVisible()
   expect(runtimeRequests).toEqual([])
 })
+
+async function readPreviewPixel(
+  preview: import('@playwright/test').Locator,
+  x: number,
+  y: number,
+): Promise<number[]> {
+  return preview.evaluate(
+    (element, point) => {
+      const canvas = element as HTMLCanvasElement
+      const context = canvas.getContext('2d')
+      if (context === null) throw new Error('missing preview context')
+      return [...context.getImageData(point.x, point.y, 1, 1).data]
+    },
+    { x, y },
+  )
+}
