@@ -39,10 +39,12 @@ async function prepareNetworkLock(): Promise<NetworkLockSession> {
   await navigator.serviceWorker.ready
   const controller = await waitForController()
   const version = await requestServiceWorkerLock(controller)
-  installFetchGuard()
-  installWebSocketGuard()
-  reloadWhenControllerChanges(controller)
-  networkLockActive = true
+  if (version !== 'development') {
+    installFetchGuard()
+    installWebSocketGuard()
+    reloadWhenControllerChanges(controller)
+    networkLockActive = true
+  }
 
   return Object.freeze({
     version,

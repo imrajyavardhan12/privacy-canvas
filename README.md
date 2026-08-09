@@ -50,6 +50,8 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
+The Vite development server deliberately uses a pass-through service worker so transformed modules and hot reload remain available. Its UI labels Network Lock unavailable: use synthetic test media only. Privacy-boundary and offline checks run against `pnpm run build` plus `pnpm run preview`, as exercised by the browser suite.
+
 Run all local checks:
 
 ```bash

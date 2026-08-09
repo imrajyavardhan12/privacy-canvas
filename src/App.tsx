@@ -31,6 +31,14 @@ const metadataCategoryLabels: Record<MetadataRiskCategory, string> = {
   'unclassified-metadata': 'Unclassified metadata',
 }
 
+type NetworkLockState =
+  | 'activating'
+  | 'active'
+  | 'development'
+  | 'update-available'
+  | 'activating-update'
+  | 'unavailable'
+
 type VerifiedExportState = Readonly<{
   url: string
   size: number
@@ -62,13 +70,8 @@ function App() {
   const exportGeneration = useRef(0)
   const verifiedExportUrl = useRef<string | null>(null)
   const [status, setStatus] = useState('Preparing private image intake…')
-  const [networkLockState, setNetworkLockState] = useState<
-    | 'activating'
-    | 'active'
-    | 'update-available'
-    | 'activating-update'
-    | 'unavailable'
-  >('activating')
+  const [networkLockState, setNetworkLockState] =
+    useState<NetworkLockState>('activating')
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -109,8 +112,15 @@ function App() {
           showUpdate()
           return
         }
-        setNetworkLockState('active')
         setReady(true)
+        if (session.version === 'development') {
+          setNetworkLockState('development')
+          setStatus(
+            'Development mode is for synthetic test media only. Network Lock guarantees are unavailable.',
+          )
+          return
+        }
+        setNetworkLockState('active')
         setStatus('Ready to inspect one local JPEG.')
       })
       .catch(() => {
@@ -357,18 +367,7 @@ function App() {
           {status}
         </p>
         <div className={`network-lock-status ${networkLockState}`}>
-          <span>
-            Network Lock{' '}
-            {networkLockState === 'active'
-              ? 'active'
-              : networkLockState === 'update-available'
-                ? 'update available'
-                : networkLockState === 'activating-update'
-                  ? 'activating update…'
-                  : networkLockState === 'unavailable'
-                    ? 'unavailable'
-                    : 'activating…'}
-          </span>
+          <span>{networkLockLabel(networkLockState)}</span>
           {networkLockState === 'update-available' ? (
             <button
               onClick={() => void activateApplicationUpdate()}
@@ -395,7 +394,10 @@ function App() {
           <input
             accept="image/jpeg,.jpg,.jpeg"
             disabled={
-              networkLockState !== 'active' || !ready || busy || exporting
+              !['active', 'development'].includes(networkLockState) ||
+              !ready ||
+              busy ||
+              exporting
             }
             onChange={(event) => void openSource(event)}
             type="file"
@@ -555,6 +557,23 @@ function App() {
       </footer>
     </main>
   )
+}
+
+function networkLockLabel(state: NetworkLockState): string {
+  switch (state) {
+    case 'active':
+      return 'Network Lock active'
+    case 'development':
+      return 'Development mode — Network Lock unavailable'
+    case 'update-available':
+      return 'Network Lock update available'
+    case 'activating-update':
+      return 'Network Lock activating update…'
+    case 'unavailable':
+      return 'Network Lock unavailable'
+    case 'activating':
+      return 'Network Lock activating…'
+  }
 }
 
 function drawPreview(

@@ -21,7 +21,7 @@ function privacyServiceWorker(): Plugin {
         response.statusCode = 200
         response.setHeader('Content-Type', 'text/javascript; charset=utf-8')
         response.setHeader('Cache-Control', 'no-store')
-        response.end(createServiceWorkerSource('development', ['/']))
+        response.end(createDevelopmentServiceWorkerSource())
       })
     },
     generateBundle(_options, bundle) {
@@ -54,6 +54,35 @@ function privacyServiceWorker(): Plugin {
       })
     },
   }
+}
+
+function createDevelopmentServiceWorkerSource(): string {
+  return `const CACHE_PREFIX = 'privacy-canvas-assets-'
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting())
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    self.clients.claim()
+      .then(() => caches.keys())
+      .then((names) => Promise.all(
+        names
+          .filter((name) => name.startsWith(CACHE_PREFIX))
+          .map((name) => caches.delete(name)),
+      )),
+  )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'activate-network-lock') return
+  event.ports[0]?.postMessage({
+    type: 'network-lock-active',
+    version: 'development',
+  })
+})
+`
 }
 
 function createServiceWorkerSource(

@@ -73,6 +73,7 @@ h1 {
   color: var(--accent);
 }
 
+.network-lock-status.development,
 .network-lock-status.update-available {
   border-color: var(--accent);
 }

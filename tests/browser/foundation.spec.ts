@@ -1,6 +1,41 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
+import { createServer } from 'vite'
+
+test('keeps development usable without presenting a production Network Lock', async ({
+  browser,
+}) => {
+  const developmentServer = await createServer({
+    logLevel: 'silent',
+    server: { host: '127.0.0.1', port: 0 },
+  })
+  await developmentServer.listen()
+  const address = developmentServer.httpServer?.address() as AddressInfo
+  const context = await browser.newContext()
+  const page = await context.newPage()
+
+  try {
+    await page.goto(`http://127.0.0.1:${address.port}/`)
+    await expect(
+      page.getByText('Development mode — Network Lock'),
+    ).toBeVisible()
+    await expect(page.getByLabel('Choose a JPEG')).toBeEnabled()
+    expect(
+      await page.evaluate(async () => (await fetch('/src/main.tsx')).ok),
+    ).toBe(true)
+
+    await page.reload()
+    await expect(
+      page.getByText('Development mode — Network Lock'),
+    ).toBeVisible()
+    await expect(page.getByLabel('Choose a JPEG')).toBeEnabled()
+  } finally {
+    await context.close()
+    await developmentServer.close()
+  }
+})
 
 test('activates the one-way Network Lock before Source Media selection', async ({
   page,
