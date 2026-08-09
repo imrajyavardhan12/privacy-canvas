@@ -18,7 +18,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /webkit-like\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'webkit-like',
+      testMatch: /webkit-like\.spec\.ts/,
+      use: { ...devices['Desktop Safari'] },
     },
   ],
 })

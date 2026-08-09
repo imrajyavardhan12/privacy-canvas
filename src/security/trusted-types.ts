@@ -8,9 +8,10 @@ type TrustedTypesFactory = Readonly<{
 }>
 
 /**
- * Vite's inline worker constructor creates a same-origin blob URL at runtime.
+ * Vite's inline worker constructor creates a same-origin blob URL at runtime,
+ * while the offline Network Lock registers the exact same-origin `/sw.js` path.
  * The default policy is deliberately unable to create HTML or script text and
- * accepts only that narrow URL shape. CSP still independently gates worker-src.
+ * accepts only those narrow URL shapes. CSP still gates worker-src separately.
  */
 export function installWorkerTrustedTypesPolicy(): void {
   const trustedTypes = (
@@ -23,11 +24,18 @@ export function installWorkerTrustedTypesPolicy(): void {
   trustedTypes.createPolicy('default', {
     createScriptURL(value) {
       const candidate = new URL(value, globalThis.location.href)
-      if (
-        candidate.protocol !== 'blob:' ||
-        candidate.origin !== globalThis.location.origin
-      ) {
-        throw new TypeError('Only same-origin blob worker URLs are allowed.')
+      const isSameOriginBlob =
+        candidate.protocol === 'blob:' &&
+        candidate.origin === globalThis.location.origin
+      const isServiceWorker =
+        candidate.origin === globalThis.location.origin &&
+        candidate.pathname === '/sw.js' &&
+        candidate.search === '' &&
+        candidate.hash === ''
+      if (!isSameOriginBlob && !isServiceWorker) {
+        throw new TypeError(
+          'Only the service worker and same-origin blob worker URLs are allowed.',
+        )
       }
       return value
     },

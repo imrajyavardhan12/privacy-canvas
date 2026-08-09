@@ -25,6 +25,20 @@ const fixtureManifest = JSON.parse(
   }>
 }
 
+async function readCacheInventory(
+  page: import('@playwright/test').Page,
+): Promise<Readonly<{ names: string[]; urls: string[] }>> {
+  return await page.evaluate(async () => {
+    const names = (await caches.keys()).sort()
+    const urls: string[] = []
+    for (const name of names) {
+      const cache = await caches.open(name)
+      urls.push(...(await cache.keys()).map(({ url }) => url))
+    }
+    return { names, urls: urls.sort() }
+  })
+}
+
 function trackNetworkRequests(
   page: import('@playwright/test').Page,
   sink: string[],
@@ -236,6 +250,7 @@ test('reset releases the preview and worker session without persistence or egres
     'Ready to inspect one local JPEG',
   )
   trackNetworkRequests(page, runtimeRequests)
+  const installedAssetCache = await readCacheInventory(page)
 
   await page
     .getByLabel('Choose a JPEG')
@@ -279,9 +294,9 @@ test('reset releases the preview and worker session without persistence or egres
       local: localStorage.length,
       session: sessionStorage.length,
       indexedDb: (await indexedDB.databases()).length,
-      caches: (await caches.keys()).length,
     })),
-  ).toEqual({ local: 0, session: 0, indexedDb: 0, caches: 0 })
+  ).toEqual({ local: 0, session: 0, indexedDb: 0 })
+  expect(await readCacheInventory(page)).toEqual(installedAssetCache)
 })
 
 test('reset terminates a pending export without waiting for its deadline', async ({

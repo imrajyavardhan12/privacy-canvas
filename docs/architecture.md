@@ -30,6 +30,14 @@ flowchart LR
 
 The initial release excludes the Detection worker. It is shown to preserve its intended relationship: it produces Suggested Regions and cannot produce Confirmed Redactions.
 
+### Network Lock and offline application assets
+
+Before Source Media selection is enabled, `src/security/network-lock.ts` registers the generated same-origin `/sw.js`, waits for an active controller, receives its versioned acknowledgement, and installs direct page guards for HTTP(S) `fetch` and WebSocket creation. The service worker precaches exactly the root document and emitted JavaScript/CSS required by the manual workflow. Once controlling, it serves requests only from its immutable version cache and returns a network error for every non-precache fetch, including subresources, worker requests, XMLHttpRequest, and beacons. This rule applies to every controlled client rather than in-memory client identifiers, so browser termination and restart of the worker remains fail closed. Production `connect-src 'none'` remains an independent boundary.
+
+`vite.config.ts` derives a 16-hex release version from the source document, emitted artifact names and bytes, and the service-worker policy itself. A new version completes `Cache.addAll` before it can become waiting. The UI then disables new media selection and exposes an explicit “Activate update and reload” action. Only that action asks the waiting worker to skip waiting; activation claims clients, removes obsolete versioned asset caches, and causes every controlled application page to reload under the one complete version. There is no runtime cache path and no user-derived URL is eligible for precaching.
+
+The complete JPEG → rectangle → verified PNG workflow is exercised after closing the installed page and reopening it with browser networking disabled. Cache inventory is unchanged by processing and reset. Playwright WebKit-like automation covers a narrow workflow and cleanup path as compatibility evidence only; it is not a browser-support claim. Real-device evidence and provisional resource calibration remain a release gate in `docs/browser-privacy-evidence.md`.
+
 ## Deep modules
 
 ### Intake module
@@ -96,18 +104,19 @@ The first platform handoff is standard browser file download from a verification
 
 ## Data lifecycle
 
-1. The UI receives a user-selected File.
-2. The client checks `File.size`, reads the File once, and transfers its `ArrayBuffer` to the media worker without conversion to a data URL.
-3. Intake validates the container and resource budget before full decode.
-4. Untrusted metadata is reduced to a plain-text Metadata Risk Summary.
-5. The media worker owns normalized full-resolution pixels.
-6. The UI receives only preview frames and document state.
-7. The user creates Confirmed Redactions through canonical Working Document operations; explicit image transforms remain planned.
-8. The media worker renders and retains a fresh full-resolution RGBA derivative while returning only a bounded redacted preview.
-9. A source-bound export request rerenders a fresh derivative and transfers its dedicated buffer to the encoder, which creates a new container without source segments.
-10. The independently derived Verifier policy checks final bytes, canonical dimensions, strict metadata structure, and final-visible rendered masks.
-11. Only after success, a verified PNG `Blob` and immutable Verification Report cross to the UI; direct user activation downloads it under the fixed safe filename `privacy-export.png`.
-12. Editing invalidates and revokes the prior download; session cleanup also revokes object URLs, closes bitmaps, detaches or overwrites buffers where practical, and terminates workers.
+1. The versioned application cache completes and Network Lock controls the page; only then can the user select Source Media.
+2. The UI receives a user-selected File.
+3. The client checks `File.size`, reads the File once, and transfers its `ArrayBuffer` to the media worker without conversion to a data URL.
+4. Intake validates the container and resource budget before full decode.
+5. Untrusted metadata is reduced to a plain-text Metadata Risk Summary.
+6. The media worker owns normalized full-resolution pixels.
+7. The UI receives only preview frames and document state.
+8. The user creates Confirmed Redactions through canonical Working Document operations; explicit image transforms remain planned.
+9. The media worker renders and retains a fresh full-resolution RGBA derivative while returning only a bounded redacted preview.
+10. A source-bound export request rerenders a fresh derivative and transfers its dedicated buffer to the encoder, which creates a new container without source segments.
+11. The independently derived Verifier policy checks final bytes, canonical dimensions, strict metadata structure, and final-visible rendered masks.
+12. Only after success, a verified PNG `Blob` and immutable Verification Report cross to the UI; direct user activation downloads it under the fixed safe filename `privacy-export.png`.
+13. Editing invalidates and revokes the prior download; session cleanup also revokes object URLs, closes bitmaps, detaches or overwrites buffers where practical, and terminates workers.
 
 Cleanup is best effort because browser and operating-system copies cannot be proven erased.
 
@@ -126,8 +135,8 @@ Errors are typed by stage: intake, resource limit, decode, render, encode, verif
 
 ## Persistence
 
-Application assets may be cached for offline execution. Source Media, decoded pixels, previews, Working Documents, metadata values, and Privacy Exports are not written to Cache Storage, IndexedDB, local storage, or session storage by v1.
+Only versioned application assets required by the manual workflow are precached for offline execution. One complete active cache and, during explicit update review, one complete waiting-version cache may exist. Source Media, decoded pixels, previews, Working Documents, metadata values, and Privacy Exports are not written to Cache Storage, IndexedDB, local storage, or session storage by v1.
 
 ## Deployment
 
-The production application is a static build hosted over HTTPS on infrastructure capable of custom response headers. Production headers are represented by `public/_headers`. Runtime assets are same-origin and bundled. The inline media worker uses a same-origin blob URL under `worker-src 'self' blob:`; `src/security/trusted-types.ts` installs a default Trusted Types policy that can create only same-origin blob script URLs and cannot create HTML or script text. A browser test loads the application under the production policy and proves other worker URL shapes and string-based HTML sinks are rejected. `connect-src 'none'` remains in force; any future requirement to relax it requires an ADR and explicit threat-model review.
+The production application is a static build hosted over HTTPS on infrastructure capable of custom response headers. Production headers are represented by `public/_headers`. Runtime assets are same-origin and bundled. The inline media worker uses a same-origin blob URL under `worker-src 'self' blob:`; `src/security/trusted-types.ts` installs a default Trusted Types policy that can create only exact same-origin `/sw.js` or same-origin blob script URLs and cannot create HTML or script text. A browser test loads the application under the production policy and proves other worker URL shapes and string-based HTML sinks are rejected. `connect-src 'none'` remains in force; any future requirement to relax it requires an ADR and explicit threat-model review.
