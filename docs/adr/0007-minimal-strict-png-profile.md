@@ -24,4 +24,8 @@ The Sanitizer releases only an immutable, branded PNG `Blob` after verification 
 - Valid PNGs outside this deliberately narrow generated profile are rejected by the runtime Verifier.
 - Compressed bytes may vary between platform implementations, so tests and verification target decoded pixels and container policy rather than byte-for-byte encoder output.
 - The runtime compressor and decompressor are platform facilities; independent command-line inspection of golden outputs remains required in CI.
-- RGBA extraction, alpha validation, compression memory, color-space/transparent-input flattening policy, full-resolution limits, and normalized-to-integer mask rasterization remain open Slice 4 integration concerns.
+- At acceptance, RGBA extraction, alpha validation, compression memory, color-space/transparent-input flattening policy, full-resolution limits, and normalized-to-integer mask rasterization were deferred to renderer/export integration.
+
+## Implementation status
+
+As of 2026-08-09, protocol version 3 connects source-bound worker export rendering to this encoder and the independently derived Working Document verification policy. A PNG `Blob` and Verification Report cross to the UI only after the strict final-byte checks pass, and the browser download URL is revoked on edit or reset. The color-conversion, transparent-input, measured-device-budget, and non-Chromium compatibility concerns above remain open.

@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { PngEncodingError } from '../encoder/png-encoder'
 import {
   SourceMediaIntakeError,
   inspectSourceMedia,
@@ -13,6 +14,8 @@ import {
   type CanonicalRenderPlan,
   type CanonicalRgbaRaster,
 } from '../renderer/canonical-renderer'
+import { createVerifiedPng } from '../sanitizer/png-sanitizer'
+import { PngVerificationError } from '../verifier/png-verifier'
 import {
   MEDIA_WORKER_PROTOCOL_VERSION,
   readMediaWorkerRequest,
@@ -58,6 +61,58 @@ async function handleMessage(value: unknown): Promise<void> {
       requestId: request.requestId,
       type: 'reset-complete',
     })
+    return
+  }
+
+  if (request.type === 'export-document') {
+    resetCanonicalRenderedPixels()
+    if (
+      normalizedCanvas === undefined ||
+      normalizedContext === undefined ||
+      currentSourceId === undefined
+    ) {
+      postFailure(request.requestId, {
+        stage: 'render',
+        code: 'source-unavailable',
+        message: 'Canonical Source Media is unavailable for export.',
+      })
+      return
+    }
+    if (request.sourceId !== currentSourceId) {
+      postFailure(request.requestId, {
+        stage: 'render',
+        code: 'stale-source',
+        message: 'The export request belongs to a stale source.',
+      })
+      return
+    }
+    try {
+      const canonicalPixels = renderCanonicalDocument(
+        normalizedCanvas,
+        normalizedContext,
+        request.renderPlan,
+      )
+      try {
+        const output = await createVerifiedPng(
+          canonicalPixels,
+          request.verificationPolicy,
+        )
+        post({
+          protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+          requestId: request.requestId,
+          type: 'export-ready',
+          sourceId: currentSourceId,
+          blob: output.blob,
+          verification: output.verification,
+        })
+      } finally {
+        if (canonicalPixels.rgba.byteLength > 0) {
+          canonicalPixels.rgba.fill(0)
+        }
+      }
+    } catch (error) {
+      postFailure(request.requestId, describeExportFailure(error))
+    }
     return
   }
 
@@ -325,6 +380,27 @@ function renderDocument(
   previewDimensions: PixelDimensions
   preview: ImageBitmap
 }> {
+  const canonicalPixels = renderCanonicalDocument(
+    sourceCanvas,
+    sourceContext,
+    plan,
+  )
+  try {
+    return {
+      canonicalPixels,
+      ...renderDocumentPreview(sourceCanvas, plan),
+    }
+  } catch (error) {
+    canonicalPixels.rgba.fill(0)
+    throw error
+  }
+}
+
+function renderCanonicalDocument(
+  sourceCanvas: OffscreenCanvas,
+  sourceContext: OffscreenCanvasRenderingContext2D,
+  plan: CanonicalRenderPlan,
+): CanonicalRgbaRaster {
   if (
     plan.dimensions.width !== sourceCanvas.width ||
     plan.dimensions.height !== sourceCanvas.height
@@ -347,16 +423,23 @@ function renderDocument(
     imageData.data.byteLength === imageData.data.buffer.byteLength
       ? new Uint8Array(imageData.data.buffer)
       : new Uint8Array(imageData.data)
-  let canonicalPixels: CanonicalRgbaRaster
   try {
-    canonicalPixels = renderCanonicalRgba(
+    return renderCanonicalRgba(
       { dimensions: plan.dimensions, rgba: sourceRgba },
       plan,
     )
   } finally {
     sourceRgba.fill(0)
   }
+}
 
+function renderDocumentPreview(
+  sourceCanvas: OffscreenCanvas,
+  plan: CanonicalRenderPlan,
+): Readonly<{
+  previewDimensions: PixelDimensions
+  preview: ImageBitmap
+}> {
   const previewDimensions = fitWithinAxis(plan.dimensions, maximumPreviewAxis)
   const previewCanvas = new OffscreenCanvas(
     previewDimensions.width,
@@ -366,10 +449,7 @@ function renderDocument(
     alpha: false,
     colorSpace: 'srgb',
   })
-  if (previewContext === null) {
-    canonicalPixels.rgba.fill(0)
-    throw new Error('render-failed')
-  }
+  if (previewContext === null) throw new Error('render-failed')
   previewContext.drawImage(
     sourceCanvas,
     0,
@@ -389,7 +469,6 @@ function renderDocument(
   }
 
   return {
-    canonicalPixels,
     previewDimensions,
     preview: previewCanvas.transferToImageBitmap(),
   }
@@ -423,6 +502,29 @@ function describeRenderFailure(error: unknown): MediaWorkerFailure {
     stage: 'render',
     code: 'render-failed',
     message: 'Canonical pixels could not be rendered safely.',
+  }
+}
+
+function describeExportFailure(error: unknown): MediaWorkerFailure {
+  if (error instanceof CanonicalRenderError) return describeRenderFailure(error)
+  if (error instanceof PngEncodingError) {
+    return {
+      stage: 'encode',
+      code: error.code,
+      message: error.message,
+    }
+  }
+  if (error instanceof PngVerificationError) {
+    return {
+      stage: 'verify',
+      code: error.code,
+      message: error.message,
+    }
+  }
+  return {
+    stage: 'verify',
+    code: 'export-failed',
+    message: 'Privacy Export could not be encoded and verified safely.',
   }
 }
 

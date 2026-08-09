@@ -1,9 +1,10 @@
 import { encodeRgbaPng, type RenderedRgbaPixels } from '../encoder/png-encoder'
 import {
   createPngVerificationPolicy,
+  PngVerificationError,
   verifyPng,
+  type PngVerificationPolicy,
   type PngVerificationReport,
-  type RequiredOpaqueRegion,
 } from '../verifier/png-verifier'
 
 const verifiedPngBrand: unique symbol = Symbol('VerifiedPng')
@@ -14,25 +15,31 @@ export type VerifiedPng = Readonly<{
   [verifiedPngBrand]: true
 }>
 
-export type PngSanitizationPolicy = Readonly<{
-  requiredOpaqueRegions: readonly RequiredOpaqueRegion[]
-}>
+export type PngSanitizationPolicy = PngVerificationPolicy
 
 export async function createVerifiedPng(
   renderedPixels: RenderedRgbaPixels,
   policy: PngSanitizationPolicy,
 ): Promise<VerifiedPng> {
-  const expectedDimensions = Object.freeze({
-    width: renderedPixels.dimensions.width,
-    height: renderedPixels.dimensions.height,
+  const verificationPolicy = createPngVerificationPolicy(policy)
+  const dimensions = renderedPixels.dimensions
+  const rgba = renderedPixels.rgba
+  const renderedDimensions = Object.freeze({
+    width: dimensions.width,
+    height: dimensions.height,
   })
-  const verificationPolicy = createPngVerificationPolicy({
-    expectedDimensions,
-    requiredOpaqueRegions: policy.requiredOpaqueRegions,
-  })
+  if (
+    renderedDimensions.width !== verificationPolicy.expectedDimensions.width ||
+    renderedDimensions.height !== verificationPolicy.expectedDimensions.height
+  ) {
+    throw new PngVerificationError(
+      'dimensions-mismatch',
+      'Rendered pixels do not match the independent verification dimensions.',
+    )
+  }
   const encoded = await encodeRgbaPng({
-    dimensions: expectedDimensions,
-    rgba: renderedPixels.rgba,
+    dimensions: verificationPolicy.expectedDimensions,
+    rgba,
   })
   const verification = await verifyPng(encoded, verificationPolicy)
   const blob = new Blob([encoded], { type: 'image/png' })

@@ -142,6 +142,68 @@ describe('MediaWorkerClient', () => {
     client.terminate()
   })
 
+  it('requests a source-bound export and releases only a verified PNG Blob', async () => {
+    vi.stubGlobal('ImageBitmap', FakeImageBitmap)
+    const worker = new SilentWorker()
+    const client = new MediaWorkerClient({
+      worker: worker as unknown as Worker,
+    })
+    worker.signalReady()
+    await client.ready
+    await openRenderableSource(client, worker)
+    const document = {
+      dimensions: { width: 64, height: 48 },
+      redactions: [],
+    } as const
+
+    const exporting = client.exportWorkingDocument(document)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(worker.messages.at(-1)).toMatchObject({
+      type: 'export-document',
+      sourceId: 7,
+      document,
+    })
+    const blob = new Blob([new Uint8Array([1])], { type: 'image/png' })
+    const verification = {
+      status: 'verified',
+      format: 'png',
+      dimensions: { width: 64, height: 48 },
+      frameCount: 1,
+      pixelProfile: 'opaque-rgb8',
+      metadataPolicy: 'core-chunks-only',
+      metadataClassesChecked: [
+        'exif',
+        'gps',
+        'xmp',
+        'iptc',
+        'comments',
+        'thumbnails',
+        'color-profiles',
+        'c2pa',
+        'other-ancillary-chunks',
+      ],
+      opaqueRegionsChecked: 0,
+    } as const
+    worker.signal({
+      protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+      requestId: 2,
+      type: 'export-ready',
+      sourceId: 7,
+      blob,
+      verification,
+    })
+
+    const result = await exporting
+    expect(result).toEqual({ sourceId: 7, blob, verification })
+    expect(Object.isFrozen(result)).toBe(true)
+    expect(Object.isFrozen(result.verification)).toBe(true)
+    expect(Object.isFrozen(result.verification.dimensions)).toBe(true)
+    expect(Object.isFrozen(result.verification.metadataClassesChecked)).toBe(
+      true,
+    )
+    client.terminate()
+  })
+
   it('terminates on rendered dimensions that differ from the Working Document', async () => {
     vi.stubGlobal('ImageBitmap', FakeImageBitmap)
     const worker = new SilentWorker()
@@ -275,6 +337,37 @@ describe('MediaWorkerClient', () => {
 
     await expect(rendering).rejects.toThrow('invalid response')
     expect(malformedPreview.closed).toBe(true)
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('reports an encode-stage timeout and terminates stale export work', async () => {
+    vi.stubGlobal('ImageBitmap', FakeImageBitmap)
+    const worker = new SilentWorker()
+    const client = new MediaWorkerClient({
+      operationTimeoutMilliseconds: 25,
+      worker: worker as unknown as Worker,
+    })
+    worker.signalReady()
+    await client.ready
+    await openRenderableSource(client, worker)
+    vi.useFakeTimers()
+
+    let failure: unknown
+    void client
+      .exportWorkingDocument({
+        dimensions: { width: 64, height: 48 },
+        redactions: [],
+      })
+      .catch((error: unknown) => {
+        failure = error
+      })
+    await vi.advanceTimersByTimeAsync(25)
+
+    expect(failure).toBeInstanceOf(MediaWorkerOperationError)
+    expect((failure as MediaWorkerOperationError).failure).toMatchObject({
+      stage: 'encode',
+      code: 'operation-timeout',
+    })
     expect(worker.terminated).toBe(true)
   })
 

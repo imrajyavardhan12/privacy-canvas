@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('describes local intake and editing without claiming verified export is ready', async ({
+test('describes local editing and verification-gated PNG download', async ({
   page,
 }) => {
   await page.goto('/')
@@ -13,7 +13,7 @@ test('describes local intake and editing without claiming verified export is rea
   )
   await expect(
     page.getByText(
-      'Rectangle editing is local; verified export is not available yet',
+      'Rectangle editing is local; verified PNG download appears only after final-output checks pass',
     ),
   ).toBeVisible()
   await expect(page.getByText('User media stays on this device')).toBeVisible()

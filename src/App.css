@@ -242,6 +242,63 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.privacy-export {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.privacy-export h2,
+.verification-report h3 {
+  margin-bottom: 0.75rem;
+}
+
+.privacy-export button,
+.verification-report a {
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.65rem;
+  background: var(--heading);
+  color: var(--background);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.privacy-export button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.privacy-export button:focus-visible,
+.verification-report a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.verification-report {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.verification-report p {
+  margin: 0;
+}
+
+.verification-report a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .reset-session {
   grid-column: 1 / -1;
   justify-self: start;

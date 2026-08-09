@@ -243,6 +243,13 @@ test('reset releases the preview and worker session without persistence or egres
   await expect(page.getByRole('status')).toContainText('Source ready')
   await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
   await expect(page.getByText('1 confirmed opaque rectangle')).toBeVisible()
+  await page.getByRole('button', { name: 'Create verified PNG' }).click()
+  const downloadLink = page.getByRole('link', {
+    name: 'Download verified PNG',
+  })
+  await expect(downloadLink).toBeVisible()
+  const verifiedUrl = await downloadLink.getAttribute('href')
+  expect(verifiedUrl).not.toBeNull()
   await page.getByRole('button', { name: 'Reset session' }).click()
 
   await expect(page.getByRole('status')).toContainText(
@@ -257,6 +264,17 @@ test('reset releases the preview and worker session without persistence or egres
   ).toBeHidden()
   expect(runtimeRequests).toEqual([])
   expect(
+    await page.evaluate(async (url) => {
+      if (url === null) return false
+      try {
+        await fetch(url)
+        return false
+      } catch {
+        return true
+      }
+    }, verifiedUrl),
+  ).toBe(true)
+  expect(
     await page.evaluate(async () => ({
       local: localStorage.length,
       session: sessionStorage.length,
@@ -264,6 +282,60 @@ test('reset releases the preview and worker session without persistence or egres
       caches: (await caches.keys()).length,
     })),
   ).toEqual({ local: 0, session: 0, indexedDb: 0, caches: 0 })
+})
+
+test('reset terminates a pending export without waiting for its deadline', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const originalPostMessage = Worker.prototype.postMessage
+    let exportIsPending = false
+    Object.defineProperty(Worker.prototype, 'postMessage', {
+      configurable: true,
+      value(
+        this: Worker,
+        message: unknown,
+        transfer: Transferable[] = [],
+      ): void {
+        const type =
+          typeof message === 'object' && message !== null && 'type' in message
+            ? (message as { readonly type?: unknown }).type
+            : undefined
+        if (type === 'export-document') {
+          exportIsPending = true
+          return
+        }
+        if (exportIsPending && type === 'reset') return
+        originalPostMessage.call(this, message, transfer)
+      },
+    })
+  })
+  await page.goto('/')
+  await expect(page.getByRole('status')).toContainText(
+    'Ready to inspect one local JPEG',
+  )
+  await page
+    .getByLabel('Choose a JPEG')
+    .setInputFiles(join(fixtureDirectory, 'control-valid.jpg'))
+  await expect(page.getByRole('status')).toContainText('Source ready')
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+
+  await page.getByRole('button', { name: 'Create verified PNG' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Creating verified PNG…' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Reset session' }).click()
+
+  await expect(page.getByRole('status')).toContainText(
+    'Ready to inspect one local JPEG',
+    { timeout: 2_000 },
+  )
+  await expect(
+    page.getByRole('link', { name: 'Download verified PNG' }),
+  ).toBeHidden()
+  await expect(
+    page.getByRole('img', { name: 'Normalized Source Media preview' }),
+  ).toBeHidden()
 })
 
 test('keeps full-resolution pixels in the worker and returns a bounded preview', async ({

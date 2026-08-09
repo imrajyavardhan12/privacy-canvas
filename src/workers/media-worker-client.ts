@@ -10,6 +10,7 @@ import {
   readMediaWorkerResponse,
   type MediaWorkerFailure,
   type MediaWorkerRequest,
+  type ExportDocumentResult,
   type MediaWorkerResponse,
   type OpenSourceResult,
   type RenderDocumentResult,
@@ -178,6 +179,57 @@ export class MediaWorkerClient {
         previewDimensions: response.previewDimensions,
         preview: response.preview,
       }
+    }
+    if (response.type === 'operation-failed') {
+      throw new MediaWorkerOperationError(response.failure)
+    }
+    return this.rejectUnexpectedResponse(response)
+  }
+
+  async exportWorkingDocument(
+    document: CanonicalRenderDocument,
+  ): Promise<ExportDocumentResult> {
+    const documentSnapshot = snapshotRenderDocument(document)
+    createCanonicalRenderPlan(documentSnapshot)
+    await this.ready
+    const sourceId = this.currentSourceId
+    if (sourceId === undefined) {
+      throw new MediaWorkerOperationError({
+        stage: 'render',
+        code: 'source-unavailable',
+        message: 'Canonical Source Media is unavailable for export.',
+      })
+    }
+    const response = await this.request(
+      {
+        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+        requestId: this.nextRequestId,
+        type: 'export-document',
+        sourceId,
+        document: documentSnapshot,
+      },
+      [],
+      'encode',
+    )
+    if (response.type === 'export-ready') {
+      if (
+        response.sourceId !== sourceId ||
+        response.verification.dimensions.width !==
+          documentSnapshot.dimensions.width ||
+        response.verification.dimensions.height !==
+          documentSnapshot.dimensions.height
+      ) {
+        const error = new Error(
+          'The media worker returned an unexpected export or stale output.',
+        )
+        this.fail(error)
+        throw error
+      }
+      return Object.freeze({
+        sourceId: response.sourceId,
+        blob: response.blob,
+        verification: snapshotVerificationReport(response.verification),
+      })
     }
     if (response.type === 'operation-failed') {
       throw new MediaWorkerOperationError(response.failure)
@@ -356,6 +408,24 @@ function snapshotRenderDocument(
         }),
       ),
     ),
+  })
+}
+
+function snapshotVerificationReport(
+  report: ExportDocumentResult['verification'],
+): ExportDocumentResult['verification'] {
+  return Object.freeze({
+    status: report.status,
+    format: report.format,
+    dimensions: Object.freeze({
+      width: report.dimensions.width,
+      height: report.dimensions.height,
+    }),
+    frameCount: report.frameCount,
+    pixelProfile: report.pixelProfile,
+    metadataPolicy: report.metadataPolicy,
+    metadataClassesChecked: Object.freeze([...report.metadataClassesChecked]),
+    opaqueRegionsChecked: report.opaqueRegionsChecked,
   })
 }
 

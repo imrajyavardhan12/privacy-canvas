@@ -11,6 +11,8 @@ Privacy Canvas welcomes careful contributions. Privacy guarantees take precedenc
 
 ## Development
 
+`pnpm run check` independently inspects the committed PNG golden with ExifTool and `c2patool`. Install both tools first (for example, `brew install exiftool c2patool` on macOS). CI installs ExifTool from Ubuntu packages and verifies the pinned `c2patool` archive digest before use.
+
 ```bash
 corepack enable pnpm
 pnpm install --frozen-lockfile

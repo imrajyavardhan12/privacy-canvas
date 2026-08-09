@@ -1,8 +1,8 @@
 # Privacy Policy and Engineering Commitments
 
-Last updated: 2026-08-05
+Last updated: 2026-08-09
 
-Privacy Canvas processes the current JPEG intake path locally. This document describes both implemented controls and the intended v1 release. Redaction, export, and output verification are not available yet.
+Privacy Canvas processes the current JPEG intake, opaque rectangle editing, and verification-gated PNG download path locally. The implemented export path freshly renders and encodes a strict PNG inside the media worker, independently verifies its final bytes and confirmed masks, and exposes a download only after those checks succeed. Native sharing, image transforms, broader input/output formats, and non-Chromium support evidence are not available.
 
 ## Data the production application will not collect
 
@@ -12,13 +12,13 @@ The static host will necessarily receive ordinary requests for application asset
 
 ## Local processing
 
-User-selected JPEG media is processed in browser memory by a dedicated media worker. Application code and required assets are bundled and same-origin. Browser tests assert that the implemented intake and reset path makes no HTTP(S) requests after selection. A one-way Network Lock remains planned as defense-in-depth for the complete editor workflow.
+User-selected JPEG media is processed in browser memory by a dedicated media worker. Full-resolution source and rendered pixels remain worker-owned; only bounded previews and a verified encoded PNG may cross to the UI. Application code and required runtime assets are bundled and same-origin. Browser tests assert that the implemented intake, editing, export, download-gating, and reset path makes no HTTP(S) requests after selection. A one-way Network Lock remains planned as defense-in-depth.
 
 ## Storage
 
 Static application assets may be stored by the browser to support offline use. Privacy Canvas v1 will not store user media, metadata values, previews, Working Documents, or exports in Cache Storage, IndexedDB, local storage, or session storage.
 
-Files are written to disk or handed to an operating-system share target only after explicit user action and successful output verification.
+The current application offers a browser download under a fixed filename only after explicit user action and successful output verification. Native operating-system sharing is not implemented.
 
 ## Cleanup limitations
 

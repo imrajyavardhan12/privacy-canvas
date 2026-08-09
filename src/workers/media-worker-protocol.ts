@@ -11,8 +11,15 @@ import {
   type CanonicalRenderDocument,
   type CanonicalRenderPlan,
 } from '../renderer/canonical-renderer'
+import type { PngEncodingCode } from '../encoder/png-encoder'
+import type {
+  PngVerificationCode,
+  PngVerificationPolicy,
+  PngVerificationReport,
+} from '../verifier/png-verifier'
+import { createPngVerificationPolicyFromWorkingDocument } from '../verifier/working-document-policy'
 
-export const MEDIA_WORKER_PROTOCOL_VERSION = 2 as const
+export const MEDIA_WORKER_PROTOCOL_VERSION = 3 as const
 
 export type MediaWorkerRequest = Readonly<
   | {
@@ -24,7 +31,7 @@ export type MediaWorkerRequest = Readonly<
   | {
       protocolVersion: typeof MEDIA_WORKER_PROTOCOL_VERSION
       requestId: number
-      type: 'render-document'
+      type: 'render-document' | 'export-document'
       sourceId: number
       document: CanonicalRenderDocument
     }
@@ -36,7 +43,7 @@ export type MediaWorkerRequest = Readonly<
 >
 
 export type ValidatedMediaWorkerRequest = Readonly<
-  | Exclude<MediaWorkerRequest, { type: 'render-document' }>
+  | Exclude<MediaWorkerRequest, { type: 'render-document' | 'export-document' }>
   | {
       protocolVersion: typeof MEDIA_WORKER_PROTOCOL_VERSION
       requestId: number
@@ -44,15 +51,26 @@ export type ValidatedMediaWorkerRequest = Readonly<
       sourceId: number
       renderPlan: CanonicalRenderPlan
     }
+  | {
+      protocolVersion: typeof MEDIA_WORKER_PROTOCOL_VERSION
+      requestId: number
+      type: 'export-document'
+      sourceId: number
+      renderPlan: CanonicalRenderPlan
+      verificationPolicy: PngVerificationPolicy
+    }
 >
 
 export type MediaWorkerFailure = Readonly<{
-  stage: SourceMediaIntakeStage | 'decode' | 'render'
+  stage: SourceMediaIntakeStage | 'decode' | 'render' | 'encode' | 'verify'
   code:
     | SourceMediaIntakeCode
     | CanonicalRenderCode
+    | PngEncodingCode
+    | PngVerificationCode
     | 'decode-failed'
     | 'render-failed'
+    | 'export-failed'
     | 'source-unavailable'
     | 'stale-source'
     | 'invalid-worker-message'
@@ -73,6 +91,12 @@ export type RenderDocumentResult = Readonly<{
   preview: ImageBitmap
 }>
 
+export type ExportDocumentResult = Readonly<{
+  sourceId: number
+  blob: Blob
+  verification: PngVerificationReport
+}>
+
 export type MediaWorkerResponse = Readonly<
   | {
       protocolVersion: typeof MEDIA_WORKER_PROTOCOL_VERSION
@@ -84,6 +108,7 @@ export type MediaWorkerResponse = Readonly<
     } & (
       | ({ type: 'source-ready'; sourceId: number } & OpenSourceResult)
       | ({ type: 'render-ready' } & RenderDocumentResult)
+      | ({ type: 'export-ready' } & ExportDocumentResult)
       | { type: 'reset-complete' }
       | { type: 'operation-failed'; failure: MediaWorkerFailure }
     ))
@@ -101,25 +126,62 @@ const riskCategories = new Set([
   'unclassified-metadata',
 ])
 const findingSources = new Set(['exif', 'iptc', 'jumbf', 'jpeg', 'xmp'])
-const failureStages = new Set(['intake', 'resource-limit', 'decode', 'render'])
-const failureCodes = new Set([
-  'dimensions-exceeded',
-  'input-bytes-exceeded',
-  'malformed-container',
-  'pixels-exceeded',
-  'unsupported-animation',
-  'unsupported-format',
-  'decode-failed',
-  'invalid-render-plan',
-  'render-resource-limit',
-  'render-dimensions-mismatch',
-  'invalid-source-pixels',
-  'render-failed',
-  'source-unavailable',
-  'stale-source',
-  'invalid-worker-message',
-  'operation-timeout',
-])
+const pngMetadataClasses = [
+  'exif',
+  'gps',
+  'xmp',
+  'iptc',
+  'comments',
+  'thumbnails',
+  'color-profiles',
+  'c2pa',
+  'other-ancillary-chunks',
+] as const
+const maximumEncodedPngBytes = 128 * 1024 * 1024
+const failureCodesByStage: Record<
+  MediaWorkerFailure['stage'],
+  ReadonlySet<string>
+> = {
+  intake: new Set([
+    'malformed-container',
+    'unsupported-animation',
+    'unsupported-format',
+    'invalid-worker-message',
+  ]),
+  'resource-limit': new Set([
+    'dimensions-exceeded',
+    'input-bytes-exceeded',
+    'pixels-exceeded',
+  ]),
+  decode: new Set(['decode-failed', 'operation-timeout']),
+  render: new Set([
+    'invalid-render-plan',
+    'render-resource-limit',
+    'render-dimensions-mismatch',
+    'invalid-source-pixels',
+    'render-failed',
+    'source-unavailable',
+    'stale-source',
+    'operation-timeout',
+  ]),
+  encode: new Set([
+    'invalid-rendered-pixels',
+    'transparent-rendered-pixels',
+    'encoding-unavailable',
+    'compression-failed',
+    'encoded-bytes-exceeded',
+    'operation-timeout',
+  ]),
+  verify: new Set([
+    'invalid-policy',
+    'malformed-png',
+    'dimensions-mismatch',
+    'forbidden-chunk',
+    'decode-failed',
+    'opaque-coverage-failed',
+    'export-failed',
+  ]),
+}
 
 export function readMediaWorkerRequest(
   value: unknown,
@@ -144,7 +206,7 @@ export function readMediaWorkerRequest(
     return value as ValidatedMediaWorkerRequest
   }
   if (
-    value.type === 'render-document' &&
+    (value.type === 'render-document' || value.type === 'export-document') &&
     hasValidSourceId(value.sourceId) &&
     hasOnlyKeys(value, [
       'protocolVersion',
@@ -155,13 +217,25 @@ export function readMediaWorkerRequest(
     ])
   ) {
     try {
-      return {
-        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
-        requestId: value.requestId,
-        type: 'render-document',
-        sourceId: value.sourceId,
-        renderPlan: createCanonicalRenderPlan(value.document),
-      }
+      const renderPlan = createCanonicalRenderPlan(value.document)
+      return value.type === 'render-document'
+        ? {
+            protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+            requestId: value.requestId,
+            type: 'render-document',
+            sourceId: value.sourceId,
+            renderPlan,
+          }
+        : {
+            protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+            requestId: value.requestId,
+            type: 'export-document',
+            sourceId: value.sourceId,
+            renderPlan,
+            verificationPolicy: createPngVerificationPolicyFromWorkingDocument(
+              value.document,
+            ),
+          }
     } catch {
       return undefined
     }
@@ -233,6 +307,22 @@ export function readMediaWorkerResponse(
     return value as MediaWorkerResponse
   }
   if (
+    value.type === 'export-ready' &&
+    hasOnlyKeys(value, [
+      'protocolVersion',
+      'requestId',
+      'type',
+      'sourceId',
+      'blob',
+      'verification',
+    ]) &&
+    hasValidSourceId(value.sourceId) &&
+    isPngBlob(value.blob) &&
+    isPngVerificationReport(value.verification)
+  ) {
+    return value as MediaWorkerResponse
+  }
+  if (
     value.type === 'source-ready' &&
     hasOnlyKeys(value, [
       'protocolVersion',
@@ -259,6 +349,49 @@ export function readMediaWorkerResponse(
     return value as MediaWorkerResponse
   }
   return undefined
+}
+
+function isPngBlob(value: unknown): value is Blob {
+  return (
+    typeof Blob !== 'undefined' &&
+    value instanceof Blob &&
+    value.type === 'image/png' &&
+    value.size > 0 &&
+    value.size <= maximumEncodedPngBytes
+  )
+}
+
+function isPngVerificationReport(
+  value: unknown,
+): value is PngVerificationReport {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, [
+      'status',
+      'format',
+      'dimensions',
+      'frameCount',
+      'pixelProfile',
+      'metadataPolicy',
+      'metadataClassesChecked',
+      'opaqueRegionsChecked',
+    ]) &&
+    value.status === 'verified' &&
+    value.format === 'png' &&
+    isSourceDimensions(value.dimensions) &&
+    value.frameCount === 1 &&
+    value.pixelProfile === 'opaque-rgb8' &&
+    value.metadataPolicy === 'core-chunks-only' &&
+    Array.isArray(value.metadataClassesChecked) &&
+    value.metadataClassesChecked.length === pngMetadataClasses.length &&
+    hasOnlyArrayElements(value.metadataClassesChecked) &&
+    value.metadataClassesChecked.every(
+      (metadataClass, index) => metadataClass === pngMetadataClasses[index],
+    ) &&
+    Number.isSafeInteger(value.opaqueRegionsChecked) &&
+    (value.opaqueRegionsChecked as number) >= 0 &&
+    (value.opaqueRegionsChecked as number) <= 1_024
+  )
 }
 
 function isInspection(value: unknown): value is SourceMediaInspection {
@@ -350,9 +483,11 @@ function isFailure(value: unknown): value is MediaWorkerFailure {
     isRecord(value) &&
     hasOnlyKeys(value, ['stage', 'code', 'message']) &&
     typeof value.stage === 'string' &&
-    failureStages.has(value.stage) &&
+    Object.hasOwn(failureCodesByStage, value.stage) &&
     typeof value.code === 'string' &&
-    failureCodes.has(value.code) &&
+    failureCodesByStage[value.stage as MediaWorkerFailure['stage']].has(
+      value.code,
+    ) &&
     typeof value.message === 'string' &&
     value.message.length > 0 &&
     value.message.length <= 256
