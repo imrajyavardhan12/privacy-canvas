@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { inflateSync } from 'node:zlib'
 
 const fixture = join(process.cwd(), 'tests/fixtures/jpeg/control-valid.jpg')
 
@@ -112,6 +114,124 @@ test('discards stale previews and redraws from retained canonical source pixels'
     })
 })
 
+test('withholds download until a full-resolution PNG is independently verified', async ({
+  page,
+}) => {
+  const runtimeRequests: string[] = []
+  await openSource(page, runtimeRequests)
+  await expect(
+    page.getByRole('link', { name: 'Download verified PNG' }),
+  ).toBeHidden()
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+
+  await page.getByRole('button', { name: 'Create verified PNG' }).click()
+  await expect(page.getByRole('status')).toContainText('Verified PNG ready')
+  await expect(page.getByText('1 opaque region checked')).toBeVisible()
+  const downloadLink = page.getByRole('link', {
+    name: 'Download verified PNG',
+  })
+  await expect(downloadLink).toHaveAttribute('download', 'privacy-export.png')
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    downloadLink.click(),
+  ])
+  const downloadedPath = await download.path()
+  expect(downloadedPath).not.toBeNull()
+  if (downloadedPath === null) return
+  const png = readStrictRgbPng(await readFile(downloadedPath))
+
+  expect(png.dimensions).toEqual({ width: 64, height: 48 })
+  expect(png.chunkTypes).toEqual(['IHDR', 'IDAT', 'IEND'])
+  expect(readRgbPixel(png.rgb, png.dimensions.width, 32, 24)).toEqual([0, 0, 0])
+  expect(runtimeRequests).toEqual([])
+})
+
+test('fails closed and restores intake after malformed export output', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const originalAddEventListener = Worker.prototype.addEventListener
+    Object.defineProperty(Worker.prototype, 'addEventListener', {
+      configurable: true,
+      value(
+        this: Worker,
+        type: string,
+        listener: EventListenerOrEventListenerObject | null,
+        options?: boolean | AddEventListenerOptions,
+      ): void {
+        if (type !== 'message' || listener === null) {
+          originalAddEventListener.call(this, type, listener, options)
+          return
+        }
+        const invokeListener = (event: Event): void => {
+          if (typeof listener === 'function') listener.call(this, event)
+          else listener.handleEvent(event)
+        }
+        const validateExportResponse = (event: Event): void => {
+          const data = (event as MessageEvent<unknown>).data
+          if (
+            typeof data === 'object' &&
+            data !== null &&
+            'type' in data &&
+            data.type === 'export-ready'
+          ) {
+            invokeListener(
+              new MessageEvent('message', {
+                data: {
+                  ...(data as Record<string, unknown>),
+                  rgba: new Uint8Array(4),
+                },
+              }),
+            )
+            return
+          }
+          invokeListener(event)
+        }
+        originalAddEventListener.call(
+          this,
+          type,
+          validateExportResponse,
+          options,
+        )
+      },
+    })
+  })
+  await openSource(page)
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+
+  await page.getByRole('button', { name: 'Create verified PNG' }).click()
+
+  await expect(page.getByRole('status')).toContainText(
+    'Privacy Export could not be verified safely',
+  )
+  await expect(page.getByLabel('Choose a JPEG')).toBeEnabled()
+  await expect(
+    page.getByRole('link', { name: 'Download verified PNG' }),
+  ).toBeHidden()
+})
+
+test('invalidates a verified download when the Working Document changes', async ({
+  page,
+}) => {
+  await openSource(page)
+  await page.getByRole('button', { name: 'Add opaque rectangle' }).click()
+  await page.getByRole('button', { name: 'Create verified PNG' }).click()
+  await expect(
+    page.getByRole('link', { name: 'Download verified PNG' }),
+  ).toBeVisible()
+
+  const editor = page.getByRole('group', { name: 'Redaction editor' })
+  await editor.focus()
+  await editor.press('ArrowRight')
+
+  await expect(
+    page.getByRole('link', { name: 'Download verified PNG' }),
+  ).toBeHidden()
+  await expect(page.getByRole('status')).toContainText(
+    'Working Document changed. Create a new verified PNG',
+  )
+})
+
 test('pointer user edits one rectangle in canonical coordinates', async ({
   page,
 }) => {
@@ -172,6 +292,71 @@ test('pointer user edits one rectangle in canonical coordinates', async ({
   await expect(page.getByText('No confirmed redactions')).toBeVisible()
   expect(runtimeRequests).toEqual([])
 })
+
+function readStrictRgbPng(bytes: Uint8Array): Readonly<{
+  dimensions: Readonly<{ width: number; height: number }>
+  chunkTypes: readonly string[]
+  rgb: Uint8Array
+}> {
+  expect([...bytes.subarray(0, 8)]).toEqual([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ])
+  const chunks: Array<Readonly<{ type: string; data: Uint8Array }>> = []
+  let offset = 8
+  while (offset < bytes.byteLength) {
+    const length = new DataView(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength,
+    ).getUint32(offset)
+    const type = String.fromCharCode(...bytes.subarray(offset + 4, offset + 8))
+    chunks.push({
+      type,
+      data: bytes.subarray(offset + 8, offset + 8 + length),
+    })
+    offset += length + 12
+  }
+  const header = chunks[0]?.data
+  if (header === undefined) throw new Error('missing PNG header')
+  const headerView = new DataView(
+    header.buffer,
+    header.byteOffset,
+    header.byteLength,
+  )
+  const dimensions = {
+    width: headerView.getUint32(0),
+    height: headerView.getUint32(4),
+  }
+  const compressed = Buffer.concat(
+    chunks.filter(({ type }) => type === 'IDAT').map(({ data }) => data),
+  )
+  const scanlines = inflateSync(compressed)
+  const rowBytes = dimensions.width * 3
+  const rgb = new Uint8Array(rowBytes * dimensions.height)
+  for (let y = 0; y < dimensions.height; y += 1) {
+    const scanlineOffset = y * (rowBytes + 1)
+    expect(scanlines[scanlineOffset]).toBe(0)
+    rgb.set(
+      scanlines.subarray(scanlineOffset + 1, scanlineOffset + rowBytes + 1),
+      y * rowBytes,
+    )
+  }
+  return {
+    dimensions,
+    chunkTypes: chunks.map(({ type }) => type),
+    rgb,
+  }
+}
+
+function readRgbPixel(
+  rgb: Uint8Array,
+  width: number,
+  x: number,
+  y: number,
+): number[] {
+  const offset = (y * width + x) * 3
+  return [...rgb.subarray(offset, offset + 3)]
+}
 
 async function readPreviewPixel(
   preview: import('@playwright/test').Locator,

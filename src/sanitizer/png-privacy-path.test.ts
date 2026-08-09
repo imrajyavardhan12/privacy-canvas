@@ -136,6 +136,7 @@ describe('PNG privacy path', () => {
         rgba: new Uint8Array([0, 0, 0, 255]),
       },
       {
+        expectedDimensions: { width: 1, height: 1 },
         requiredOpaqueRegions: [
           { x: 0, y: 0, width: 1, height: 1, color: '#000000' },
         ],
@@ -150,6 +151,47 @@ describe('PNG privacy path', () => {
     expect(Object.isFrozen(output.verification.dimensions)).toBe(true)
   })
 
+  it('snapshots mutable rendered-pixel getters before asynchronous work', async () => {
+    let dimensionReads = 0
+    let rgbaReads = 0
+    const rendered = {
+      get dimensions(): Readonly<{ width: number; height: number }> {
+        dimensionReads += 1
+        return dimensionReads === 1
+          ? { width: 1, height: 1 }
+          : { width: 2, height: 2 }
+      },
+      get rgba(): Uint8Array<ArrayBuffer> {
+        rgbaReads += 1
+        return new Uint8Array([0, 0, 0, 255])
+      },
+    }
+
+    await expect(
+      createVerifiedPng(rendered, {
+        expectedDimensions: { width: 1, height: 1 },
+        requiredOpaqueRegions: [],
+      }),
+    ).resolves.toMatchObject({ verification: { status: 'verified' } })
+    expect(dimensionReads).toBe(1)
+    expect(rgbaReads).toBe(1)
+  })
+
+  it('rejects rendered dimensions that differ from the independent policy', async () => {
+    const rgba = new Uint8Array([0, 0, 0, 255])
+
+    await expect(
+      createVerifiedPng(
+        { dimensions: { width: 1, height: 1 }, rgba },
+        {
+          expectedDimensions: { width: 2, height: 1 },
+          requiredOpaqueRegions: [],
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'dimensions-mismatch' })
+    expect(rgba.byteLength).toBe(4)
+  })
+
   it('cannot bypass the Sanitizer gate by mutating policy during encoding', async () => {
     const requiredOpaqueRegions = [
       { x: 0, y: 0, width: 1, height: 1, color: '#000000' as const },
@@ -159,7 +201,10 @@ describe('PNG privacy path', () => {
         dimensions: { width: 1, height: 1 },
         rgba: new Uint8Array([210, 59, 49, 255]),
       },
-      { requiredOpaqueRegions },
+      {
+        expectedDimensions: { width: 1, height: 1 },
+        requiredOpaqueRegions,
+      },
     )
     requiredOpaqueRegions.length = 0
 
@@ -176,6 +221,7 @@ describe('PNG privacy path', () => {
           rgba: new Uint8Array([210, 59, 49, 255]),
         },
         {
+          expectedDimensions: { width: 1, height: 1 },
           requiredOpaqueRegions: [
             { x: 0, y: 0, width: 1, height: 1, color: '#000000' },
           ],

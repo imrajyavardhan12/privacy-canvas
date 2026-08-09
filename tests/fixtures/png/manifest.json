@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "goldens": [
+    {
+      "file": "verified-redaction.png",
+      "sha256": "efaf4e8737730be25c73b81ead0645835994ccaf346ae062a2d86b028357c0ec",
+      "source": "../jpeg/control-valid.jpg",
+      "sourceSha256": "cf18d6abb54141fcf214547f9d62c889c265195ef8527d6f87df899e0cc967c9",
+      "dimensions": {
+        "width": 64,
+        "height": 48
+      },
+      "redaction": {
+        "x": 0.25,
+        "y": 0.25,
+        "width": 0.5,
+        "height": 0.5,
+        "color": "#000000"
+      },
+      "expectedChunks": ["IHDR", "IDAT", "IEND"],
+      "expectedPixelProfile": "opaque-rgb8",
+      "expectedC2paClaim": false
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import {
   MediaWorkerClient,
   MediaWorkerOperationError,
 } from './workers/media-worker-client'
+import type { PngVerificationReport } from './verifier/png-verifier'
 import './App.css'
 
 const metadataCategoryLabels: Record<MetadataRiskCategory, string> = {
@@ -25,6 +26,12 @@ const metadataCategoryLabels: Record<MetadataRiskCategory, string> = {
   timestamp: 'Timestamps',
   'unclassified-metadata': 'Unclassified metadata',
 }
+
+type VerifiedExportState = Readonly<{
+  url: string
+  size: number
+  verification: PngVerificationReport
+}>
 
 const principles = [
   {
@@ -47,9 +54,14 @@ const principles = [
 function App() {
   const mediaWorker = useRef<MediaWorkerClient | null>(null)
   const previewCanvas = useRef<HTMLCanvasElement | null>(null)
+  const exportGeneration = useRef(0)
+  const verifiedExportUrl = useRef<string | null>(null)
   const [status, setStatus] = useState('Preparing private image intake…')
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [verifiedExport, setVerifiedExport] =
+    useState<VerifiedExportState | null>(null)
   const [sourceName, setSourceName] = useState<string | null>(null)
   const [inspection, setInspection] = useState<SourceMediaInspection | null>(
     null,
@@ -79,6 +91,11 @@ function App() {
       })
     return () => {
       active = false
+      exportGeneration.current += 1
+      if (verifiedExportUrl.current !== null) {
+        URL.revokeObjectURL(verifiedExportUrl.current)
+        verifiedExportUrl.current = null
+      }
       mediaWorker.current?.terminate()
       mediaWorker.current = null
     }
@@ -115,6 +132,15 @@ function App() {
     }
   }, [workingDocument])
 
+  const clearVerifiedExport = (): void => {
+    exportGeneration.current += 1
+    if (verifiedExportUrl.current !== null) {
+      URL.revokeObjectURL(verifiedExportUrl.current)
+      verifiedExportUrl.current = null
+    }
+    setVerifiedExport(null)
+  }
+
   const replaceMediaWorker = async (
     current: MediaWorkerClient,
   ): Promise<boolean> => {
@@ -139,6 +165,56 @@ function App() {
     }
   }
 
+  const createPrivacyExport = async (): Promise<void> => {
+    const client = mediaWorker.current
+    const document = workingDocument
+    if (client === null || document === null || busy || exporting) return
+
+    clearVerifiedExport()
+    const generation = exportGeneration.current
+    setExporting(true)
+    setStatus('Rendering, freshly encoding, and verifying the PNG locally…')
+    try {
+      const result = await client.exportWorkingDocument(document)
+      if (
+        generation !== exportGeneration.current ||
+        mediaWorker.current !== client
+      ) {
+        return
+      }
+      const url = URL.createObjectURL(result.blob)
+      verifiedExportUrl.current = url
+      setVerifiedExport({
+        url,
+        size: result.blob.size,
+        verification: result.verification,
+      })
+      setStatus('Verified PNG ready. Download is now available.')
+    } catch (error) {
+      if (generation !== exportGeneration.current) return
+      const message =
+        error instanceof MediaWorkerOperationError
+          ? error.message
+          : 'Privacy Export could not be verified safely.'
+      const requiresFreshWorker =
+        !(error instanceof MediaWorkerOperationError) ||
+        error.failure.code === 'operation-timeout'
+      if (requiresFreshWorker) {
+        setInspection(null)
+        setSourceName(null)
+        setWorkingDocument(null)
+        clearPreview(previewCanvas.current)
+        if (!(await replaceMediaWorker(client))) {
+          setStatus('Private image processing is unavailable in this browser.')
+          return
+        }
+      }
+      setStatus(message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const openSource = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ): Promise<void> => {
@@ -148,6 +224,7 @@ function App() {
     if (file === null || file === undefined || client === null || busy) return
 
     setBusy(true)
+    clearVerifiedExport()
     setInspection(null)
     setSourceName(null)
     setWorkingDocument(null)
@@ -188,19 +265,24 @@ function App() {
   const resetSession = async (): Promise<void> => {
     const client = mediaWorker.current
     if (client === null || busy) return
+    const terminatePendingExport = exporting
 
     setBusy(true)
     setReady(false)
+    setExporting(false)
+    clearVerifiedExport()
     setInspection(null)
     setSourceName(null)
     setWorkingDocument(null)
     setStatus('Releasing the current private session…')
     clearPreview(previewCanvas.current)
 
-    try {
-      await client.reset()
-    } catch {
-      // Worker termination below remains the fail-closed cleanup path.
+    if (!terminatePendingExport) {
+      try {
+        await client.reset()
+      } catch {
+        // Worker termination below remains the fail-closed cleanup path.
+      }
     }
 
     const replaced = await replaceMediaWorker(client)
@@ -233,14 +315,14 @@ function App() {
           <p>
             The original bytes move to a dedicated media worker. Nothing is
             uploaded or saved to browser storage. Rectangle editing is local;
-            verified export is not available yet.
+            verified PNG download appears only after final-output checks pass.
           </p>
         </div>
         <label className="file-picker">
           <span>Choose a JPEG</span>
           <input
             accept="image/jpeg,.jpg,.jpeg"
-            disabled={!ready || busy}
+            disabled={!ready || busy || exporting}
             onChange={(event) => void openSource(event)}
             type="file"
           />
@@ -249,7 +331,16 @@ function App() {
         <RectangleEditor
           canvasRef={previewCanvas}
           document={workingDocument}
-          onDocumentChange={setWorkingDocument}
+          onDocumentChange={(document) => {
+            const invalidatedExport = verifiedExportUrl.current !== null
+            clearVerifiedExport()
+            setWorkingDocument(document)
+            if (invalidatedExport) {
+              setStatus(
+                'Working Document changed. Create a new verified PNG before downloading.',
+              )
+            }
+          }}
         />
 
         {inspection !== null && sourceName !== null ? (
@@ -271,6 +362,52 @@ function App() {
                 <dd>{inspection.metadataRiskSummary.status}</dd>
               </div>
             </dl>
+
+            <section className="privacy-export" aria-labelledby="export-title">
+              <div>
+                <p className="eyebrow">Privacy Export</p>
+                <h2 id="export-title">Create a verified PNG</h2>
+                <p>
+                  Full-resolution pixels stay in the media worker. Download
+                  appears only after fresh encoding and final-byte verification
+                  both succeed.
+                </p>
+              </div>
+              <button
+                disabled={busy || exporting}
+                onClick={() => void createPrivacyExport()}
+                type="button"
+              >
+                {exporting ? 'Creating verified PNG…' : 'Create verified PNG'}
+              </button>
+              {verifiedExport === null ? null : (
+                <div className="verification-report">
+                  <h3>Verification report</h3>
+                  <p>
+                    Verified opaque RGB PNG ·{' '}
+                    {verifiedExport.verification.dimensions.width} ×{' '}
+                    {verifiedExport.verification.dimensions.height} pixels ·{' '}
+                    {formatBytes(verifiedExport.size)}
+                  </p>
+                  <p>
+                    {verifiedExport.verification.opaqueRegionsChecked}{' '}
+                    {verifiedExport.verification.opaqueRegionsChecked === 1
+                      ? 'opaque region checked'
+                      : 'opaque regions checked'}
+                    . Core chunks only; metadata and source profiles are
+                    excluded by the verified PNG profile.
+                  </p>
+                  <p>
+                    Verification checks file properties and confirmed masks. It
+                    cannot prove that every Sensitive Region was found or
+                    guarantee anonymity.
+                  </p>
+                  <a download="privacy-export.png" href={verifiedExport.url}>
+                    Download verified PNG
+                  </a>
+                </div>
+              )}
+            </section>
 
             <button
               className="reset-session"
@@ -364,6 +501,11 @@ function drawPreview(
   } finally {
     preview.close()
   }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`
+  return `${(bytes / 1_024).toFixed(1)} KiB`
 }
 
 function clearPreview(canvas: HTMLCanvasElement | null): void {

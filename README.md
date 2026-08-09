@@ -3,7 +3,7 @@
 Privacy Canvas is a local-first image privacy workbench for irreversible visual redaction and verifiable metadata sanitization.
 
 > [!WARNING]
-> Privacy Canvas is in its tracer-bullet phase. The current build accepts one local JPEG for bounded metadata inspection, a normalized preview, and one editable opaque rectangle, but full-resolution rendering, export, and output verification are not available. Do not rely on it for safety-critical work until a reviewed release is published.
+> Privacy Canvas is in its tracer-bullet phase. The current build accepts one local JPEG, supports one editable opaque rectangle, and gates full-resolution PNG download on fresh encoding and independent final-output verification. Device budgets, cross-browser evidence, transforms, and broader v1 format support remain incomplete. Do not rely on it for safety-critical work until a reviewed release is published.
 
 ## Product promise
 
@@ -24,7 +24,7 @@ The current tracer bullet is:
 
 > Open a JPEG containing sensitive metadata, inspect a risk summary, add one opaque rectangle, export a full-resolution PNG, and independently verify the output.
 
-Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced previews, typed intake/decode failures, best-effort session reset, one canonical opaque rectangle with pointer/keyboard editing and undo/redo, and a standalone strict PNG encoder/verifier foundation for synthetic rendered pixels. Full-resolution rendering, worker/UI export integration, independent canonical mask rasterization, external-tool output inspection, and save/share gating remain unimplemented.
+Implemented so far: hostile synthetic fixtures, fail-closed JPEG preflight, bounded metadata risk classification, worker-owned JPEG decoding, EXIF orientation normalization, reduced redacted previews, typed stage failures, best-effort session reset, one canonical opaque rectangle with pointer/keyboard editing and undo/redo, worker-owned full-resolution rendering, fresh strict PNG encoding, independently derived final-mask verification, verification-gated browser download, and committed ExifTool/C2PA golden inspection. Image transforms, PNG/WebP intake, JPEG/WebP output, native sharing, measured device budgets, broad cross-browser evidence, and release review remain incomplete.
 
 See:
 

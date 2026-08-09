@@ -13,8 +13,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run fixtures:verify && pnpm run build",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run fixtures:verify && pnpm run golden:verify && pnpm run build",
     "fixtures:verify": "node scripts/verify-fixture-corpus.mjs",
+    "golden:verify": "node scripts/verify-png-golden.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "oxlint",

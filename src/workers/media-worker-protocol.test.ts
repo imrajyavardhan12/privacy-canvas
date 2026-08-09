@@ -53,6 +53,57 @@ describe('media worker protocol', () => {
     })
   })
 
+  it('derives independent render and verification policies for export', () => {
+    expect(
+      readMediaWorkerRequest({
+        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+        requestId: 3,
+        type: 'export-document',
+        sourceId: 1,
+        document: {
+          dimensions: { width: 4, height: 2 },
+          redactions: [
+            {
+              id: 'redaction-1',
+              kind: 'rectangle',
+              status: 'confirmed',
+              x: 0.25,
+              y: 0,
+              width: 0.5,
+              height: 1,
+              color: '#000000',
+              opacity: 1,
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+      requestId: 3,
+      type: 'export-document',
+      sourceId: 1,
+      renderPlan: {
+        dimensions: { width: 4, height: 2 },
+        redactions: [
+          {
+            id: 'redaction-1',
+            x: 1,
+            y: 0,
+            width: 2,
+            height: 2,
+            color: '#000000',
+          },
+        ],
+      },
+      verificationPolicy: {
+        expectedDimensions: { width: 4, height: 2 },
+        requiredOpaqueRegions: [
+          { x: 1, y: 0, width: 2, height: 2, color: '#000000' },
+        ],
+      },
+    })
+  })
+
   it('rejects hidden pixel data attached to render-request arrays', () => {
     const redactions = Object.assign([], { rgba: new Uint8Array(32) })
 
@@ -89,6 +140,87 @@ describe('media worker protocol', () => {
 
     expect(readMediaWorkerResponse(response)).toBe(response)
     expect(response).not.toHaveProperty('rgba')
+  })
+
+  it('accepts only a verified PNG export without canonical pixels', () => {
+    const response = {
+      protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+      requestId: 3,
+      type: 'export-ready',
+      sourceId: 1,
+      blob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
+      verification: {
+        status: 'verified',
+        format: 'png',
+        dimensions: { width: 4, height: 2 },
+        frameCount: 1,
+        pixelProfile: 'opaque-rgb8',
+        metadataPolicy: 'core-chunks-only',
+        metadataClassesChecked: [
+          'exif',
+          'gps',
+          'xmp',
+          'iptc',
+          'comments',
+          'thumbnails',
+          'color-profiles',
+          'c2pa',
+          'other-ancillary-chunks',
+        ],
+        opaqueRegionsChecked: 1,
+      },
+    }
+
+    expect(readMediaWorkerResponse(response)).toBe(response)
+    expect(response).not.toHaveProperty('rgba')
+  })
+
+  it('rejects an export response that attempts to expose rendered pixels', () => {
+    expect(
+      readMediaWorkerResponse({
+        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+        requestId: 3,
+        type: 'export-ready',
+        sourceId: 1,
+        blob: new Blob([new Uint8Array([1])], { type: 'image/png' }),
+        verification: {
+          status: 'verified',
+          format: 'png',
+          dimensions: { width: 4, height: 2 },
+          frameCount: 1,
+          pixelProfile: 'opaque-rgb8',
+          metadataPolicy: 'core-chunks-only',
+          metadataClassesChecked: [
+            'exif',
+            'gps',
+            'xmp',
+            'iptc',
+            'comments',
+            'thumbnails',
+            'color-profiles',
+            'c2pa',
+            'other-ancillary-chunks',
+          ],
+          opaqueRegionsChecked: 1,
+        },
+        rgba: new Uint8Array(32),
+      }),
+    ).toBeUndefined()
+  })
+
+  it('rejects failure codes paired with the wrong operation stage', () => {
+    expect(
+      readMediaWorkerResponse({
+        protocolVersion: MEDIA_WORKER_PROTOCOL_VERSION,
+        requestId: 3,
+        type: 'operation-failed',
+        failure: {
+          stage: 'encode',
+          code: 'malformed-png',
+          message: 'A verifier failure cannot claim to be an encoder failure.',
+        },
+      }),
+    ).toBeUndefined()
   })
 
   it('rejects a source response that attempts to expose extra pixel data', () => {

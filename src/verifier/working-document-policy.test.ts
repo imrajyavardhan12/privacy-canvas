@@ -105,11 +105,7 @@ describe('Working Document PNG verification policy', () => {
     )
     const policy = createPngVerificationPolicyFromWorkingDocument(document)
 
-    await expect(
-      createVerifiedPng(rendered, {
-        requiredOpaqueRegions: policy.requiredOpaqueRegions,
-      }),
-    ).resolves.toMatchObject({
+    await expect(createVerifiedPng(rendered, policy)).resolves.toMatchObject({
       verification: {
         status: 'verified',
         dimensions: { width: 3, height: 1 },
