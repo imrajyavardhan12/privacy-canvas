@@ -151,24 +151,24 @@ Risk rankings assume high data sensitivity, public internet delivery, no server-
 
 ## Focus paths for security review
 
-| Path                                                        | Why it matters                                                                                                    | Related Threat IDs     |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `src/document/`                                             | Defines redaction geometry, opacity, transforms, and edit invariants                                              | TM-004, TM-008         |
-| `src/intake/`                                               | Parses attacker-controlled JPEG containers and enforces resource budgets                                          | TM-001, TM-003, TM-005 |
-| `src/workers/`                                              | Owns transferred Source bytes, normalized pixels, message validation, and cleanup                                 | TM-003, TM-006         |
-| `src/renderer/`                                             | Determines integer mask coverage, ordering, and canonical output pixels                                           | TM-004                 |
-| `src/encoder/`                                              | Fresh container creation must never accept or copy Source Media segments                                          | TM-004, TM-005         |
-| `src/sanitizer/`                                            | Gates immutable output on successful final-byte verification                                                      | TM-004, TM-005         |
-| `src/verifier/`                                             | A false success directly breaks the product promise                                                               | TM-004, TM-005, TM-008 |
-| `src/App.tsx`                                               | Gates the current download object URL on verified worker output and revokes stale URLs                            | TM-005, TM-008         |
-| `src/platform/`                                             | Will isolate future native-share and additional platform seams                                                    | TM-005, TM-008         |
-| `src/ui/`                                                   | Displays untrusted metadata, maps editing input, and communicates safety limitations                              | TM-001, TM-004, TM-008 |
-| `public/_headers`                                           | Defines production browser restrictions against injection and egress                                              | TM-001, TM-002         |
-| `src/security/network-lock.ts`, `vite.config.ts`, `public/` | Network gating, update activation, generated cache policy, and static headers affect egress and offline integrity | TM-002, TM-006, TM-007 |
-| `.github/workflows/`                                        | Build and release compromise has systemic impact                                                                  | TM-002                 |
-| `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml` | Dependency integrity, resolution policy, and scripts define the build surface                                     | TM-002                 |
-| `tests/fixtures/`                                           | Must represent hostile metadata, malformed containers, and negative outputs                                       | TM-001, TM-003, TM-005 |
-| `tests/browser/`                                            | Must prove no egress, no persistence, offline behaviour, and export gating                                        | TM-001, TM-006, TM-007 |
+| Path                                                        | Why it matters                                                                                                                                                            | Related Threat IDs     |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `src/document/`                                             | Defines redaction geometry, opacity, transforms, and edit invariants                                                                                                      | TM-004, TM-008         |
+| `src/intake/`                                               | Parses attacker-controlled JPEG containers and enforces resource budgets                                                                                                  | TM-001, TM-003, TM-005 |
+| `src/workers/`                                              | Owns transferred Source bytes, normalized pixels, message validation, and cleanup                                                                                         | TM-003, TM-006         |
+| `src/renderer/`                                             | Determines integer mask coverage, ordering, and canonical output pixels                                                                                                   | TM-004                 |
+| `src/encoder/`                                              | Fresh container creation must never accept or copy Source Media segments                                                                                                  | TM-004, TM-005         |
+| `src/sanitizer/`                                            | Gates immutable output on successful final-byte verification                                                                                                              | TM-004, TM-005         |
+| `src/verifier/`                                             | A false success directly breaks the product promise                                                                                                                       | TM-004, TM-005, TM-008 |
+| `src/App.tsx`                                               | Gates the current download object URL on verified worker output and revokes stale URLs                                                                                    | TM-005, TM-008         |
+| `src/platform/`                                             | Will isolate future native-share and additional platform seams                                                                                                            | TM-005, TM-008         |
+| `src/ui/`                                                   | Displays untrusted metadata, maps editing input, and communicates safety limitations                                                                                      | TM-001, TM-004, TM-008 |
+| `public/_headers`                                           | Defines production browser restrictions against injection and egress                                                                                                      | TM-001, TM-002         |
+| `src/security/network-lock.ts`, `vite.config.ts`, `public/` | Network gating, update activation, generated cache policy, and static headers (including the same-origin-only `/sw.js` CSP exception) affect egress and offline integrity | TM-002, TM-006, TM-007 |
+| `.github/workflows/`                                        | Build and release compromise has systemic impact                                                                                                                          | TM-002                 |
+| `package.json`, `pnpm-lock.yaml`, and `pnpm-workspace.yaml` | Dependency integrity, resolution policy, and scripts define the build surface                                                                                             | TM-002                 |
+| `tests/fixtures/`                                           | Must represent hostile metadata, malformed containers, and negative outputs                                                                                               | TM-001, TM-003, TM-005 |
+| `tests/browser/`                                            | Must prove no egress, no persistence, offline behaviour, and export gating                                                                                                | TM-001, TM-006, TM-007 |
 
 ## Quality check
 
