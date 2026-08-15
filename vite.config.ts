@@ -116,11 +116,7 @@ self.addEventListener('message', (event) => {
     event.waitUntil(self.skipWaiting())
     return
   }
-  if (
-    event.data?.type !== 'activate-network-lock' ||
-    event.source === null ||
-    typeof event.source.id !== 'string'
-  ) return
+  if (event.data?.type !== 'activate-network-lock') return
   event.ports[0]?.postMessage({ type: 'network-lock-active', version: ${JSON.stringify(version)} })
 })
 

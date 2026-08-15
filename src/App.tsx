@@ -35,6 +35,7 @@ type NetworkLockState =
   | 'activating'
   | 'active'
   | 'development'
+  | 'processing-unavailable'
   | 'update-available'
   | 'activating-update'
   | 'unavailable'
@@ -89,15 +90,31 @@ function App() {
     try {
       client = new MediaWorkerClient()
     } catch {
+      setNetworkLockState('processing-unavailable')
       setStatus('Private image intake is unavailable in this browser.')
       return
     }
     let active = true
     let unsubscribeFromUpdate = (): void => undefined
     mediaWorker.current = client
-    void Promise.all([client.ready, activateNetworkLock()])
-      .then(([, session]) => {
+    void Promise.allSettled([client.ready, activateNetworkLock()]).then(
+      ([workerResult, networkLockResult]) => {
         if (!active) return
+        if (workerResult.status === 'rejected') {
+          client.terminate()
+          if (mediaWorker.current === client) mediaWorker.current = null
+          setNetworkLockState('processing-unavailable')
+          setStatus('Private image processing is unavailable in this browser.')
+          return
+        }
+        if (networkLockResult.status === 'rejected') {
+          client.terminate()
+          if (mediaWorker.current === client) mediaWorker.current = null
+          setNetworkLockState('unavailable')
+          setStatus('Network Lock is unavailable in this browser.')
+          return
+        }
+        const session = networkLockResult.value
         networkLock.current = session
         const showUpdate = (): void => {
           if (!active) return
@@ -122,17 +139,8 @@ function App() {
         }
         setNetworkLockState('active')
         setStatus('Ready to inspect one local JPEG.')
-      })
-      .catch(() => {
-        if (!active) return
-        client.terminate()
-        if (mediaWorker.current === client) mediaWorker.current = null
-        networkLock.current = null
-        setNetworkLockState('unavailable')
-        setStatus(
-          'Private image processing or Network Lock is unavailable in this browser.',
-        )
-      })
+      },
+    )
     return () => {
       active = false
       unsubscribeFromUpdate()
@@ -565,6 +573,8 @@ function networkLockLabel(state: NetworkLockState): string {
       return 'Network Lock active'
     case 'development':
       return 'Development mode — Network Lock unavailable'
+    case 'processing-unavailable':
+      return 'Private image processing unavailable'
     case 'update-available':
       return 'Network Lock update available'
     case 'activating-update':
