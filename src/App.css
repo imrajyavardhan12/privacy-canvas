@@ -54,6 +54,41 @@ h1 {
   background: var(--panel);
 }
 
+.network-lock-status {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.75rem 0 0;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  color: var(--heading);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.network-lock-status.active {
+  border-color: var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+}
+
+.network-lock-status.development,
+.network-lock-status.update-available {
+  border-color: var(--accent);
+}
+
+.network-lock-status button {
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--heading);
+  color: var(--background);
+  font: inherit;
+  cursor: pointer;
+}
+
 .intake {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

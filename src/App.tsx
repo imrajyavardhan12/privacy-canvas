@@ -13,6 +13,10 @@ import {
   MediaWorkerOperationError,
 } from './workers/media-worker-client'
 import type { PngVerificationReport } from './verifier/png-verifier'
+import {
+  activateNetworkLock,
+  type NetworkLockSession,
+} from './security/network-lock'
 import './App.css'
 
 const metadataCategoryLabels: Record<MetadataRiskCategory, string> = {
@@ -26,6 +30,15 @@ const metadataCategoryLabels: Record<MetadataRiskCategory, string> = {
   timestamp: 'Timestamps',
   'unclassified-metadata': 'Unclassified metadata',
 }
+
+type NetworkLockState =
+  | 'activating'
+  | 'active'
+  | 'development'
+  | 'processing-unavailable'
+  | 'update-available'
+  | 'activating-update'
+  | 'unavailable'
 
 type VerifiedExportState = Readonly<{
   url: string
@@ -53,10 +66,13 @@ const principles = [
 
 function App() {
   const mediaWorker = useRef<MediaWorkerClient | null>(null)
+  const networkLock = useRef<NetworkLockSession | null>(null)
   const previewCanvas = useRef<HTMLCanvasElement | null>(null)
   const exportGeneration = useRef(0)
   const verifiedExportUrl = useRef<string | null>(null)
   const [status, setStatus] = useState('Preparing private image intake…')
+  const [networkLockState, setNetworkLockState] =
+    useState<NetworkLockState>('activating')
   const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -74,23 +90,61 @@ function App() {
     try {
       client = new MediaWorkerClient()
     } catch {
+      setNetworkLockState('processing-unavailable')
       setStatus('Private image intake is unavailable in this browser.')
       return
     }
     let active = true
+    let unsubscribeFromUpdate = (): void => undefined
     mediaWorker.current = client
-    void client.ready
-      .then(() => {
+    void Promise.allSettled([client.ready, activateNetworkLock()]).then(
+      ([workerResult, networkLockResult]) => {
         if (!active) return
+        if (workerResult.status === 'rejected') {
+          client.terminate()
+          if (mediaWorker.current === client) mediaWorker.current = null
+          setNetworkLockState('processing-unavailable')
+          setStatus('Private image processing is unavailable in this browser.')
+          return
+        }
+        if (networkLockResult.status === 'rejected') {
+          client.terminate()
+          if (mediaWorker.current === client) mediaWorker.current = null
+          setNetworkLockState('unavailable')
+          setStatus('Network Lock is unavailable in this browser.')
+          return
+        }
+        const session = networkLockResult.value
+        networkLock.current = session
+        const showUpdate = (): void => {
+          if (!active) return
+          setReady(false)
+          setNetworkLockState('update-available')
+          setStatus(
+            'Application update ready. Activate it before opening Source Media.',
+          )
+        }
+        unsubscribeFromUpdate = session.subscribeToUpdate(showUpdate)
+        if (session.updateAvailable) {
+          showUpdate()
+          return
+        }
         setReady(true)
+        if (session.version === 'development') {
+          setNetworkLockState('development')
+          setStatus(
+            'Development mode is for synthetic test media only. Network Lock guarantees are unavailable.',
+          )
+          return
+        }
+        setNetworkLockState('active')
         setStatus('Ready to inspect one local JPEG.')
-      })
-      .catch(() => {
-        if (!active) return
-        setStatus('Private image intake is unavailable in this browser.')
-      })
+      },
+    )
     return () => {
       active = false
+      unsubscribeFromUpdate()
+      networkLock.current = null
       exportGeneration.current += 1
       if (verifiedExportUrl.current !== null) {
         URL.revokeObjectURL(verifiedExportUrl.current)
@@ -131,6 +185,20 @@ function App() {
       active = false
     }
   }, [workingDocument])
+
+  const activateApplicationUpdate = async (): Promise<void> => {
+    const session = networkLock.current
+    if (session === null || !session.updateAvailable) return
+    setReady(false)
+    setNetworkLockState('activating-update')
+    setStatus('Activating the complete application update and reloading…')
+    try {
+      await session.activateUpdate()
+    } catch {
+      setNetworkLockState('unavailable')
+      setStatus('The application update could not be activated safely.')
+    }
+  }
 
   const clearVerifiedExport = (): void => {
     exportGeneration.current += 1
@@ -306,6 +374,17 @@ function App() {
         <p className="status" role="status">
           {status}
         </p>
+        <div className={`network-lock-status ${networkLockState}`}>
+          <span>{networkLockLabel(networkLockState)}</span>
+          {networkLockState === 'update-available' ? (
+            <button
+              onClick={() => void activateApplicationUpdate()}
+              type="button"
+            >
+              Activate update and reload
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <section className="intake" aria-labelledby="intake-title">
@@ -322,7 +401,12 @@ function App() {
           <span>Choose a JPEG</span>
           <input
             accept="image/jpeg,.jpg,.jpeg"
-            disabled={!ready || busy || exporting}
+            disabled={
+              !['active', 'development'].includes(networkLockState) ||
+              !ready ||
+              busy ||
+              exporting
+            }
             onChange={(event) => void openSource(event)}
             type="file"
           />
@@ -481,6 +565,25 @@ function App() {
       </footer>
     </main>
   )
+}
+
+function networkLockLabel(state: NetworkLockState): string {
+  switch (state) {
+    case 'active':
+      return 'Network Lock active'
+    case 'development':
+      return 'Development mode — Network Lock unavailable'
+    case 'processing-unavailable':
+      return 'Private image processing unavailable'
+    case 'update-available':
+      return 'Network Lock update available'
+    case 'activating-update':
+      return 'Network Lock activating update…'
+    case 'unavailable':
+      return 'Network Lock unavailable'
+    case 'activating':
+      return 'Network Lock activating…'
+  }
 }
 
 function drawPreview(

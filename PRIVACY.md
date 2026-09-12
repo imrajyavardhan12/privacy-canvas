@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-09
 
-Privacy Canvas processes the current JPEG intake, opaque rectangle editing, and verification-gated PNG download path locally. The implemented export path freshly renders and encodes a strict PNG inside the media worker, independently verifies its final bytes and confirmed masks, and exposes a download only after those checks succeed. Native sharing, image transforms, broader input/output formats, and non-Chromium support evidence are not available.
+Privacy Canvas processes the current JPEG intake, opaque rectangle editing, and verification-gated PNG download path locally. The implemented export path freshly renders and encodes a strict PNG inside the media worker, independently verifies its final bytes and confirmed masks, and exposes a download only after those checks succeed. Narrow WebKit-like automation is compatibility evidence only; real-device Safari and Android results and supported-browser claims are not available. Native sharing, image transforms, and broader input/output formats also remain unavailable.
 
 ## Data the production application will not collect
 
@@ -12,11 +12,13 @@ The static host will necessarily receive ordinary requests for application asset
 
 ## Local processing
 
-User-selected JPEG media is processed in browser memory by a dedicated media worker. Full-resolution source and rendered pixels remain worker-owned; only bounded previews and a verified encoded PNG may cross to the UI. Application code and required runtime assets are bundled and same-origin. Browser tests assert that the implemented intake, editing, export, download-gating, and reset path makes no HTTP(S) requests after selection. A one-way Network Lock remains planned as defense-in-depth.
+User-selected JPEG media is processed in browser memory by a dedicated media worker. Full-resolution source and rendered pixels remain worker-owned; only bounded previews and a verified encoded PNG may cross to the UI. Application code and required runtime assets are bundled and same-origin.
+
+Media selection remains disabled until the one-way Network Lock has installed its complete application-asset cache, controls the page, and acknowledges activation. The active service worker serves only its precached application version and rejects every other fetch from controlled clients, including browser subresources, workers, XMLHttpRequest, and beacons; page guards additionally reject direct HTTP(S) `fetch` and WebSocket creation. The application-page CSP keeps `connect-src 'none'`. The `/sw.js` response has a narrower path-specific CSP exception of `connect-src 'self'`, required only for its same-origin `Cache.addAll` during installation; the worker has no cross-origin URL or runtime network path. Browser tests cover activation, service-worker restart, update/reload, offline execution, storage inventory, and no network egress through the tested mechanisms. Network Lock is defense-in-depth for the reviewed application, not a sandbox against a compromised browser, operating system, extension, or malicious release.
 
 ## Storage
 
-Static application assets may be stored by the browser to support offline use. Privacy Canvas v1 will not store user media, metadata values, previews, Working Documents, or exports in Cache Storage, IndexedDB, local storage, or session storage.
+The browser stores one active, versioned cache containing only the root document and built JavaScript/CSS required for the manual workflow. A fully installed update may wait in a second asset-only cache until the user explicitly activates it; activation switches controllers, reloads every controlled application page, and removes obsolete versioned caches. Privacy Canvas does not store user media, metadata values, previews, Working Documents, or exports in Cache Storage, IndexedDB, local storage, or session storage.
 
 The current application offers a browser download under a fixed filename only after explicit user action and successful output verification. Native operating-system sharing is not implemented.
 

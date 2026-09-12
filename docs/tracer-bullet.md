@@ -57,6 +57,10 @@ Implemented rectangle-only evidence: one source-bound worker operation independe
 
 Exercise the complete workflow under Chromium and WebKit-like automation where practical; inspect storage, object URL cleanup, CSP, requests, keyboard flow, and offline behaviour. Complete real-device Safari and Android checks before release.
 
+Implemented automation evidence: Source Media selection remains disabled until a generated versioned service worker has precached the complete application shell, controls the page, and acknowledges the one-way Network Lock. Controlled clients can read only that version's root/JS/CSS cache; non-precache fetches fail closed across page, subresource, worker, XMLHttpRequest, beacon, and service-worker-restart paths, while direct page HTTP(S) fetch and WebSocket creation are additionally guarded. Browser tests prove a complete offline manual export, unchanged asset-only storage across reset, a waiting update state, explicit atomic activation, all-client reload, and obsolete-cache removal. The existing CSP, hostile text, object-URL cleanup, keyboard workflow, and no-egress coverage remains in force. A narrow JPEG → rectangle → verified PNG → reset workflow passes Playwright's WebKit engine, but this is compatibility evidence rather than a Safari support claim.
+
+Physical iOS Safari and mid-range Android Chrome runs, peak-memory observations, megapixel calibration, and the provisional 20-second deadline calibration have not been performed because no target devices are available in the current environment. This remains an explicit release blocker rather than an inferred support claim; the evidence matrix and manual protocol are in `docs/browser-privacy-evidence.md`.
+
 ## Exit gate
 
 The tracer bullet is complete only when:
