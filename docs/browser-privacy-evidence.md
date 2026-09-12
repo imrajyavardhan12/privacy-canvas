@@ -2,14 +2,14 @@
 
 Status: automated Slice 6 evidence complete; real-device release gate blocked
 
-Last updated: 2026-08-09
+Last updated: 2026-08-21
 
 ## Automated evidence
 
 `pnpm run test:e2e` builds on the production bundle produced by `pnpm run check` and exercises:
 
 - Chromium: production Network Lock before intake; rejection of direct fetch, subresource, dedicated-worker fetch, XMLHttpRequest, beacon, and WebSocket paths; fail-closed service-worker restart; explicit waiting-update activation; all-client reload; obsolete-cache removal; exact asset-only cache inventory; full offline JPEG → rectangle → verified PNG workflow; CSP/Trusted Types; pointer and keyboard editing; object-URL cleanup; reset; no user-media persistence or post-selection HTTP(S) egress; and explicit non-private development-mode behavior across reload.
-- Playwright WebKit: one narrow JPEG → rectangle → verified PNG → reset path, including Network Lock state and local/session/IndexedDB/asset-cache inventory.
+- Playwright WebKit: one narrow JPEG → rectangle → verified PNG → reset path, including Network Lock state and local/session/IndexedDB/asset-cache inventory; a compatibility regression also exercises the service-worker client-message acknowledgement fallback when the transferred-port reply is unavailable.
 
 The Playwright WebKit result is compatibility evidence for the automated engine. It is not a Safari, iOS, or supported-browser claim.
 

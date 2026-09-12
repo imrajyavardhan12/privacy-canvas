@@ -1,7 +1,33 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const fixture = join(process.cwd(), 'tests/fixtures/jpeg/control-valid.jpg')
+
+test('accepts a service-worker client-message acknowledgement in WebKit-like automation', async ({
+  context,
+  page,
+}) => {
+  const currentServiceWorker = await readFile(
+    join(process.cwd(), 'dist/sw.js'),
+    'utf8',
+  )
+  const directMessageServiceWorker = currentServiceWorker.replace(
+    '  event.ports[0]?.postMessage(acknowledgement)',
+    '  // Intentionally omit the transferred-port acknowledgement.',
+  )
+  expect(directMessageServiceWorker).not.toBe(currentServiceWorker)
+  await context.route('**/sw.js', async (route) => {
+    await route.fulfill({
+      body: directMessageServiceWorker,
+      contentType: 'text/javascript; charset=utf-8',
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByText('Network Lock active')).toBeVisible()
+})
 
 test('exercises the narrow verified workflow in WebKit-like automation', async ({
   page,

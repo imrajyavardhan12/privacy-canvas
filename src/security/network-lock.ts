@@ -1,5 +1,6 @@
 let activation: Promise<NetworkLockSession> | undefined
 let networkLockActive = false
+let lockRequestSequence = 0
 
 const activationTimeoutMilliseconds = 10_000
 
@@ -129,32 +130,60 @@ async function requestServiceWorkerLock(
 ): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const channel = new MessageChannel()
+    const requestId = `network-lock-${Date.now().toString(36)}-${++lockRequestSequence}`
+    const message = {
+      type: 'activate-network-lock',
+      requestId,
+    }
+    const handleAcknowledgement = (event: MessageEvent<unknown>): void => {
+      if (
+        typeof event.data !== 'object' ||
+        event.data === null ||
+        !('type' in event.data) ||
+        event.data.type !== 'network-lock-active' ||
+        !('requestId' in event.data) ||
+        event.data.requestId !== requestId ||
+        !('version' in event.data) ||
+        typeof event.data.version !== 'string' ||
+        !/^(?:[a-f0-9]{16}|development)$/.test(event.data.version)
+      ) {
+        return
+      }
+      clearTimeout(timeout)
+      navigator.serviceWorker.removeEventListener(
+        'message',
+        handleAcknowledgement,
+      )
+      channel.port1.close()
+      resolve(event.data.version)
+    }
     const timeout = setTimeout(() => {
+      navigator.serviceWorker.removeEventListener(
+        'message',
+        handleAcknowledgement,
+      )
       channel.port1.close()
       reject(new Error('Network Lock acknowledgement timed out.'))
     }, activationTimeoutMilliseconds)
-    channel.port1.addEventListener(
-      'message',
-      (event: MessageEvent<unknown>) => {
-        if (
-          typeof event.data !== 'object' ||
-          event.data === null ||
-          !('type' in event.data) ||
-          event.data.type !== 'network-lock-active' ||
-          !('version' in event.data) ||
-          typeof event.data.version !== 'string' ||
-          !/^(?:[a-f0-9]{16}|development)$/.test(event.data.version)
-        ) {
-          return
-        }
-        clearTimeout(timeout)
-        channel.port1.close()
-        resolve(event.data.version)
-      },
-      { once: true },
-    )
+    navigator.serviceWorker.addEventListener('message', handleAcknowledgement)
+    channel.port1.addEventListener('message', handleAcknowledgement)
+    navigator.serviceWorker.startMessages?.()
     channel.port1.start()
-    controller.postMessage({ type: 'activate-network-lock' }, [channel.port2])
+    try {
+      controller.postMessage(message, [channel.port2])
+    } catch {
+      try {
+        controller.postMessage(message)
+      } catch (error) {
+        clearTimeout(timeout)
+        navigator.serviceWorker.removeEventListener(
+          'message',
+          handleAcknowledgement,
+        )
+        channel.port1.close()
+        reject(error)
+      }
+    }
   })
 }
 

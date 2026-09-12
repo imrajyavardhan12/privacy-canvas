@@ -76,11 +76,17 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('message', (event) => {
-  if (event.data?.type !== 'activate-network-lock') return
-  event.ports[0]?.postMessage({
+  if (
+    event.data?.type !== 'activate-network-lock' ||
+    typeof event.data.requestId !== 'string'
+  ) return
+  const acknowledgement = {
     type: 'network-lock-active',
     version: 'development',
-  })
+    requestId: event.data.requestId,
+  }
+  event.source?.postMessage(acknowledgement)
+  event.ports[0]?.postMessage(acknowledgement)
 })
 `
 }
@@ -116,8 +122,17 @@ self.addEventListener('message', (event) => {
     event.waitUntil(self.skipWaiting())
     return
   }
-  if (event.data?.type !== 'activate-network-lock') return
-  event.ports[0]?.postMessage({ type: 'network-lock-active', version: ${JSON.stringify(version)} })
+  if (
+    event.data?.type !== 'activate-network-lock' ||
+    typeof event.data.requestId !== 'string'
+  ) return
+  const acknowledgement = {
+    type: 'network-lock-active',
+    version: ${JSON.stringify(version)},
+    requestId: event.data.requestId,
+  }
+  event.source?.postMessage(acknowledgement)
+  event.ports[0]?.postMessage(acknowledgement)
 })
 
 self.addEventListener('fetch', (event) => {
