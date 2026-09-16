@@ -30,15 +30,15 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
-    "@types/node": "24.13.3",
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.5.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "6.0.5",
-    "oxlint": "1.75.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "oxlint": "1.82.0",
     "prettier": "3.9.6",
-    "typescript": "6.0.2",
-    "vite": "8.2.0",
-    "vitest": "4.1.10"
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.0"
   }
 }
